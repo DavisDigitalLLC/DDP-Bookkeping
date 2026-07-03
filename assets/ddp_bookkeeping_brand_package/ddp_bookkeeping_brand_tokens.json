@@ -1,0 +1,141 @@
+{
+  "brand": {
+    "name": "DDP Bookkeeping",
+    "category": "Accounting / Bookkeeping App",
+    "positioning": "Modern, trustworthy, clean financial branding for bookkeeping and accounting services.",
+    "personality": [
+      "modern",
+      "trustworthy",
+      "clean",
+      "professional",
+      "approachable",
+      "finance-focused"
+    ]
+  },
+  "logo": {
+    "concept": "Geometric DDP monogram with a small bar-chart/growth cue integrated into the P.",
+    "primary_logo": "Horizontal lockup: DDP monogram + vertical divider + DDP Bookkeeping wordmark.",
+    "app_icon": "Simplified DDP monogram on a full-bleed deep green gradient background.",
+    "usage": {
+      "preferred_background": "Deep green gradient or white/light neutral depending on placement.",
+      "clear_space": "Maintain clear space around the logo equal to at least the height of the small bar-chart mark inside the P.",
+      "minimum_size": "Keep the horizontal logo large enough that the word Bookkeeping remains readable. Use the standalone icon at small sizes."
+    }
+  },
+  "colors": {
+    "deepEvergreen": {
+      "name": "Deep Evergreen",
+      "hex": "#005A43",
+      "role": "Primary anchor color; backgrounds, headers, navigation, primary brand surfaces."
+    },
+    "forestGreen": {
+      "name": "Forest Green",
+      "hex": "#0A3D33",
+      "role": "Dark supporting green; gradients, shadows, high-contrast text areas."
+    },
+    "emeraldAccent": {
+      "name": "Emerald Accent",
+      "hex": "#00C98D",
+      "role": "Highlight color; charts, progress indicators, CTAs, active states."
+    },
+    "mintHighlight": {
+      "name": "Mint Highlight",
+      "hex": "#6FE7BE",
+      "role": "Soft accent; success highlights, badges, subtle backgrounds."
+    },
+    "white": {
+      "name": "White",
+      "hex": "#FFFFFF",
+      "role": "Logo/text on green, clean surfaces, content cards."
+    },
+    "softGray": {
+      "name": "Soft Gray",
+      "hex": "#F4F6F5",
+      "role": "Page backgrounds, dividers, secondary cards."
+    },
+    "charcoalText": {
+      "name": "Charcoal Text",
+      "hex": "#18211F",
+      "role": "Primary body copy on light backgrounds."
+    },
+    "mutedText": {
+      "name": "Muted Text",
+      "hex": "#64736E",
+      "role": "Secondary labels and helper text."
+    }
+  },
+  "gradients": {
+    "primaryGreenBleed": {
+      "css": "linear-gradient(135deg, #0A3D33 0%, #005A43 48%, #008C67 100%)",
+      "usage": "Full-bleed banner, splash, hero, app icon background."
+    },
+    "emeraldGlow": {
+      "css": "linear-gradient(135deg, #005A43 0%, #00C98D 100%)",
+      "usage": "Accent graphics, chart highlights, small illustration elements."
+    }
+  },
+  "typography": {
+    "primary": {
+      "family": "Montserrat",
+      "weights": [
+        600,
+        700
+      ],
+      "usage": "Logo-inspired headings, page titles, bold UI labels."
+    },
+    "secondary": {
+      "family": "Inter",
+      "weights": [
+        400,
+        500
+      ],
+      "usage": "Body copy, UI text, forms, tables, settings."
+    },
+    "optionalAccent": {
+      "family": "Manrope",
+      "weights": [
+        500
+      ],
+      "usage": "Optional accent labels, small cards, marketing callouts."
+    },
+    "fallbackStack": "Inter, Montserrat, Manrope, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+  },
+  "ui_style": {
+    "borderRadius": {
+      "small": "8px",
+      "medium": "14px",
+      "large": "24px",
+      "appIconPreview": "22%"
+    },
+    "shadow": "0 18px 45px rgba(10, 61, 51, 0.18)",
+    "cardBorder": "1px solid rgba(10, 61, 51, 0.10)",
+    "iconStyle": "Minimal line/filled icons; finance-focused; avoid clutter and overly literal clipart.",
+    "spacing": "Generous whitespace, clean alignment, simple hierarchy."
+  },
+  "usage_notes": [
+    "Use deep green as the anchor brand color.",
+    "Use emerald for highlights, charts, and CTAs.",
+    "Maintain generous white space and clean alignment.",
+    "Keep iconography minimal and finance-focused.",
+    "Use the standalone DDP icon when the wordmark would be too small.",
+    "Avoid adding unnecessary financial symbols such as dollar signs unless they serve a clear UI purpose."
+  ],
+  "assets": {
+    "banner_1024x500": "assets/ddp_bookkeeping_banner_1024x500.png",
+    "app_icon_1024x1024": "assets/ddp_bookkeeping_app_icon_1024x1024.png",
+    "brand_profile_image": "assets/ddp_bookkeeping_brand_profile_guide.png"
+  },
+  "implementation": {
+    "css_variables": {
+      "--ddp-deep-evergreen": "#005A43",
+      "--ddp-forest-green": "#0A3D33",
+      "--ddp-emerald-accent": "#00C98D",
+      "--ddp-mint-highlight": "#6FE7BE",
+      "--ddp-white": "#FFFFFF",
+      "--ddp-soft-gray": "#F4F6F5",
+      "--ddp-charcoal-text": "#18211F",
+      "--ddp-muted-text": "#64736E",
+      "--ddp-primary-gradient": "linear-gradient(135deg, #0A3D33 0%, #005A43 48%, #008C67 100%)"
+    }
+  }
+}
