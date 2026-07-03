@@ -1,14 +1,35 @@
 :root {
-  --color-bg: #f7f8fa;
-  --color-surface: #ffffff;
-  --color-border: #e2e5ea;
-  --color-text: #1a1d23;
-  --color-text-muted: #6b7280;
-  --color-primary: #2563eb;
-  --color-primary-hover: #1d4ed8;
-  --color-danger: #dc2626;
-  --color-success: #16a34a;
-  --radius: 8px;
+  /* DDP Bookkeeping brand tokens (assets/ddp_bookkeeping_brand_package) */
+  --ddp-deep-evergreen: #005a43;
+  --ddp-forest-green: #0a3d33;
+  --ddp-emerald-accent: #00c98d;
+  --ddp-mint-highlight: #6fe7be;
+  --ddp-white: #ffffff;
+  --ddp-soft-gray: #f4f6f5;
+  --ddp-charcoal-text: #18211f;
+  --ddp-muted-text: #64736e;
+  --ddp-primary-gradient: linear-gradient(135deg, #0a3d33 0%, #005a43 48%, #008c67 100%);
+  --ddp-emerald-glow: linear-gradient(135deg, #005a43 0%, #00c98d 100%);
+
+  --font-heading: 'Montserrat', 'Inter', 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-body: 'Inter', 'Montserrat', 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  --color-bg: var(--ddp-soft-gray);
+  --color-surface: var(--ddp-white);
+  --color-border: rgba(10, 61, 51, 0.1);
+  --color-text: var(--ddp-charcoal-text);
+  --color-text-muted: var(--ddp-muted-text);
+  --color-primary: var(--ddp-deep-evergreen);
+  --color-primary-hover: var(--ddp-forest-green);
+  --color-accent: var(--ddp-emerald-accent);
+  --color-danger: #b3261e;
+  --color-success: var(--ddp-deep-evergreen);
+
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 24px;
+  --radius: var(--radius-sm);
+  --shadow-card: 0 18px 45px rgba(10, 61, 51, 0.1);
 }
 
 * {
@@ -18,6 +39,11 @@
 body {
   background: var(--color-bg);
   color: var(--color-text);
+  font-family: var(--font-body);
+}
+
+h1, h2, h3, h4, .nav-brand, .metric-value {
+  font-family: var(--font-heading);
 }
 
 .app-shell {
@@ -35,12 +61,12 @@ body {
 
 .nav {
   width: 220px;
-  background: var(--color-surface);
-  border-right: 1px solid var(--color-border);
+  background: var(--ddp-primary-gradient);
   padding: 20px 16px;
   display: flex;
   flex-direction: column;
   gap: 4px;
+  box-shadow: var(--shadow-card);
 }
 
 .nav-brand {
@@ -48,33 +74,44 @@ body {
   font-size: 1.1rem;
   margin-bottom: 16px;
   padding: 0 8px;
+  color: var(--ddp-white);
 }
 
 .nav a {
   display: block;
   padding: 8px 10px;
-  border-radius: var(--radius);
-  color: var(--color-text);
+  border-radius: var(--radius-sm);
+  color: rgba(255, 255, 255, 0.82);
   text-decoration: none;
   font-size: 0.95rem;
 }
 
 .nav a.active,
 .nav a:hover {
-  background: #eef2ff;
-  color: var(--color-primary);
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--ddp-mint-highlight);
 }
 
 .nav button {
   margin-top: auto;
 }
 
+.nav .tooltip-hint {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.nav button.secondary {
+  border-color: rgba(255, 255, 255, 0.3);
+  color: var(--ddp-white);
+}
+
 .card {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-md);
   padding: 20px;
   margin-bottom: 20px;
+  box-shadow: var(--shadow-card);
 }
 
 .card-grid {
@@ -94,6 +131,7 @@ body {
   font-size: 1.6rem;
   font-weight: 700;
   margin-top: 4px;
+  color: var(--ddp-deep-evergreen);
 }
 
 .form-row {
@@ -112,20 +150,27 @@ body {
 input, select, textarea {
   padding: 9px 10px;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-sm);
   font-size: 0.95rem;
   font-family: inherit;
 }
 
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--ddp-emerald-accent);
+  box-shadow: 0 0 0 3px rgba(0, 201, 141, 0.18);
+}
+
 button {
   padding: 9px 16px;
-  border-radius: var(--radius);
+  border-radius: var(--radius-sm);
   border: none;
   background: var(--color-primary);
   color: white;
   font-weight: 600;
   cursor: pointer;
   font-size: 0.9rem;
+  transition: background 0.15s ease;
 }
 
 button:hover {
@@ -136,6 +181,10 @@ button.secondary {
   background: transparent;
   color: var(--color-text);
   border: 1px solid var(--color-border);
+}
+
+button.secondary:hover {
+  background: var(--ddp-soft-gray);
 }
 
 button:disabled {
@@ -172,10 +221,16 @@ th {
   display: flex;
   align-items: center;
   justify-content: center;
+  background: var(--ddp-primary-gradient);
 }
 
 .auth-card {
   width: 360px;
+  box-shadow: 0 24px 60px rgba(10, 61, 51, 0.35);
+}
+
+.auth-card h2 {
+  color: var(--ddp-deep-evergreen);
 }
 
 .tooltip-hint {
