@@ -7,12 +7,24 @@ function monthKey(dateStr) {
   return dateStr.slice(0, 7); // 'YYYY-MM'
 }
 
-function lastNMonthKeys(n, endDate = new Date()) {
+export function currentMonthKey(date = new Date()) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+export function shiftMonthKey(monthKeyStr, delta) {
+  const [y, m] = monthKeyStr.split('-').map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+/** Inclusive list of 'YYYY-MM' keys from startMonth through endMonth. */
+export function monthRangeKeys(startMonth, endMonth) {
   const keys = [];
-  const cursor = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
-  for (let i = n - 1; i >= 0; i--) {
-    const d = new Date(cursor.getFullYear(), cursor.getMonth() - i, 1);
-    keys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+  let cursor = startMonth;
+  // Guard against an inverted or absurd range.
+  for (let i = 0; i < 600 && cursor <= endMonth; i++) {
+    keys.push(cursor);
+    cursor = shiftMonthKey(cursor, 1);
   }
   return keys;
 }
@@ -26,7 +38,7 @@ function addInto(target, source) {
   return target;
 }
 
-function toRow({ level, label, glNumber = '', monthKeys, monthCentsMap, months, bold = false }) {
+function toRow({ level, label, glNumber = '', monthKeys, monthCentsMap, bold = false }) {
   const values = monthKeys.map((m) => monthCentsMap.get(m) ?? 0);
   const totalCents = values.reduce((s, v) => s + v, 0);
   return {
@@ -36,12 +48,46 @@ function toRow({ level, label, glNumber = '', monthKeys, monthCentsMap, months, 
     bold,
     monthlyTotals: Object.fromEntries(monthKeys.map((m, i) => [m, fromCents(values[i])])),
     total: fromCents(totalCents),
-    average: fromCents(Math.round(totalCents / months)),
+    average: fromCents(Math.round(totalCents / monthKeys.length)),
   };
 }
 
 /**
- * Hierarchical trend report:
+ * Deterministic, display-only 4-digit numbering for the revenue hierarchy
+ * (Service Line -> Department -> Product). These are report labels, not
+ * real posting accounts -- kept in a 4100-4299 block reserved for this so
+ * they never collide with the actual GL revenue accounts (4000/4010/...).
+ */
+function buildRevenueNumbering(bySL) {
+  const numbers = new Map(); // 'serviceLine' | 'serviceLine|department' | 'serviceLine|department|product' -> number
+  let nextSlBase = 4100;
+  for (const [serviceLine, byDept] of bySL.entries()) {
+    const slBase = nextSlBase;
+    numbers.set(serviceLine, slBase);
+
+    let deptIndex = 0;
+    for (const [department, products] of byDept.entries()) {
+      if (department) {
+        deptIndex += 1;
+        const deptBase = slBase + deptIndex * 10;
+        numbers.set(`${serviceLine}|${department}`, deptBase);
+        products.forEach((product, i) => {
+          numbers.set(`${serviceLine}|${department}|${product.id}`, deptBase + i + 1);
+        });
+      } else {
+        products.forEach((product, i) => {
+          numbers.set(`${serviceLine}|${department}|${product.id}`, slBase + i + 1);
+        });
+      }
+    }
+    nextSlBase += 100;
+  }
+  return numbers;
+}
+
+/**
+ * Hierarchical trend report over an explicit [startMonth, endMonth] range
+ * (both 'YYYY-MM', inclusive):
  *  - Revenue: Service Line -> Department -> Product, each with subtotals,
  *    followed by a Total Revenue row.
  *  - Operating Expenses: one row per GL account, broken into vendor
@@ -56,9 +102,10 @@ function toRow({ level, label, glNumber = '', monthKeys, monthCentsMap, months, 
  * monthlyTotals, total, average }, so the UI can render every section as a
  * flat, indented table.
  */
-export async function generateHierarchicalTrends(userId, { months = 12 } = {}) {
-  const monthKeys = lastNMonthKeys(months);
-  const windowStart = `${monthKeys[0]}-01`;
+export async function generateHierarchicalTrends(userId, { startMonth, endMonth }) {
+  const monthKeys = monthRangeKeys(startMonth, endMonth);
+  const windowStart = `${startMonth}-01`;
+  const windowEnd = `${shiftMonthKey(endMonth, 1)}-01`; // exclusive upper bound
 
   const [{ data: productLines, error: plError }, { data: accounts, error: acctError }, { data: transactions, error: txError }] =
     await Promise.all([
@@ -81,6 +128,7 @@ export async function generateHierarchicalTrends(userId, { months = 12 } = {}) {
         .select('amount, transaction_date, description, debit_account_id, credit_account_id, product_line_id')
         .eq('user_id', userId)
         .gte('transaction_date', windowStart)
+        .lt('transaction_date', windowEnd)
         .in('status', ['posted', 'reconciled']),
     ]);
   if (plError) throw plError;
@@ -135,6 +183,7 @@ export async function generateHierarchicalTrends(userId, { months = 12 } = {}) {
     if (!byDept.has(deptKey)) byDept.set(deptKey, []);
     byDept.get(deptKey).push(p);
   }
+  const revenueNumbers = buildRevenueNumbering(bySL);
 
   for (const [serviceLine, byDept] of bySL.entries()) {
     const slCents = zeroMonthMap(monthKeys);
@@ -147,19 +196,43 @@ export async function generateHierarchicalTrends(userId, { months = 12 } = {}) {
       for (const product of products) {
         const productCents = revenueByProduct.get(product.id) ?? zeroMonthMap(monthKeys);
         deptRows.push(
-          toRow({ level: 2, label: product.product_name, monthKeys, monthCentsMap: productCents, months })
+          toRow({
+            level: 2,
+            label: product.product_name,
+            glNumber: revenueNumbers.get(`${serviceLine}|${department}|${product.id}`) ?? '',
+            monthKeys,
+            monthCentsMap: productCents,
+          })
         );
         addInto(deptCents, productCents);
       }
 
       addInto(slCents, deptCents);
       if (department) {
-        slRows.push(toRow({ level: 1, label: department, monthKeys, monthCentsMap: deptCents, months, bold: true }));
+        slRows.push(
+          toRow({
+            level: 1,
+            label: department,
+            glNumber: revenueNumbers.get(`${serviceLine}|${department}`) ?? '',
+            monthKeys,
+            monthCentsMap: deptCents,
+            bold: true,
+          })
+        );
       }
       slRows.push(...deptRows);
     }
 
-    revenueRows.push(toRow({ level: 0, label: serviceLine, monthKeys, monthCentsMap: slCents, months, bold: true }));
+    revenueRows.push(
+      toRow({
+        level: 0,
+        label: serviceLine,
+        glNumber: revenueNumbers.get(serviceLine) ?? '',
+        monthKeys,
+        monthCentsMap: slCents,
+        bold: true,
+      })
+    );
     revenueRows.push(...slRows);
     addInto(totalRevenueCents, slCents);
   }
@@ -167,12 +240,12 @@ export async function generateHierarchicalTrends(userId, { months = 12 } = {}) {
   const unassignedRevenue = revenueByProduct.get('__unassigned__');
   if (unassignedRevenue && [...unassignedRevenue.values()].some((v) => v !== 0)) {
     revenueRows.push(
-      toRow({ level: 0, label: 'Unassigned / Overhead', monthKeys, monthCentsMap: unassignedRevenue, months, bold: true })
+      toRow({ level: 0, label: 'Unassigned / Overhead', monthKeys, monthCentsMap: unassignedRevenue, bold: true })
     );
     addInto(totalRevenueCents, unassignedRevenue);
   }
 
-  const totalRevenueRow = toRow({ level: 0, label: 'Total Revenue', monthKeys, monthCentsMap: totalRevenueCents, months, bold: true });
+  const totalRevenueRow = toRow({ level: 0, label: 'Total Revenue', monthKeys, monthCentsMap: totalRevenueCents, bold: true });
   revenueRows.push(totalRevenueRow);
 
   // ---------------------------------------------------------------------
@@ -193,7 +266,7 @@ export async function generateHierarchicalTrends(userId, { months = 12 } = {}) {
     const vendorRows = [];
 
     for (const [vendor, monthMap] of vendorMap.entries()) {
-      vendorRows.push(toRow({ level: 1, label: vendor, monthKeys, monthCentsMap: monthMap, months }));
+      vendorRows.push(toRow({ level: 1, label: vendor, monthKeys, monthCentsMap: monthMap }));
       addInto(accountCents, monthMap);
     }
     vendorRows.sort((a, b) => b.total - a.total);
@@ -205,7 +278,6 @@ export async function generateHierarchicalTrends(userId, { months = 12 } = {}) {
         glNumber: account.account_number,
         monthKeys,
         monthCentsMap: accountCents,
-        months,
         bold: true,
       })
     );
@@ -217,7 +289,6 @@ export async function generateHierarchicalTrends(userId, { months = 12 } = {}) {
     label: 'Total Operating Expenses',
     monthKeys,
     monthCentsMap: totalOperatingCents,
-    months,
     bold: true,
   });
   operatingRows.push(totalOperatingRow);
@@ -236,7 +307,6 @@ export async function generateHierarchicalTrends(userId, { months = 12 } = {}) {
         glNumber: account.account_number,
         monthKeys,
         monthCentsMap: accountCents,
-        months,
       })
     );
     addInto(totalFixedCents, accountCents);
@@ -246,7 +316,6 @@ export async function generateHierarchicalTrends(userId, { months = 12 } = {}) {
     label: 'Total Fixed Expenses',
     monthKeys,
     monthCentsMap: totalFixedCents,
-    months,
     bold: true,
   });
   fixedRows.push(totalFixedRow);
@@ -266,7 +335,7 @@ export async function generateHierarchicalTrends(userId, { months = 12 } = {}) {
     { ...totalRevenueRow, label: 'Total Revenue' },
     { ...totalOperatingRow, label: 'Total Operating Expenses' },
     { ...totalFixedRow, label: 'Total Fixed Expenses' },
-    toRow({ level: 0, label: 'Net Income', monthKeys, monthCentsMap: netIncomeCents, months, bold: true }),
+    toRow({ level: 0, label: 'Net Income', monthKeys, monthCentsMap: netIncomeCents, bold: true }),
   ];
 
   return { months: monthKeys, revenueRows, operatingRows, fixedRows, summaryRows };
