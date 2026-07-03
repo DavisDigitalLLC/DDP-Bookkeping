@@ -323,11 +323,16 @@ function lastNMonthKeys(n, endDate = new Date()) {
 }
 
 /**
- * Month-over-month trend per GL line item (revenue/expense account) over a
- * rolling window, with the average/high/low/total across that window --
- * mirrors how a trailing-twelve-month (TTM) report reads.
+ * Month-over-month trend per line item over a rolling window, with the
+ * average/high/low/total across that window -- mirrors how a
+ * trailing-twelve-month (TTM) report reads.
+ *
+ * groupBy: 'account' (default) breaks out by GL account, e.g. "Product
+ * Sales (Digital)" as one row. 'productLine' breaks out by product line
+ * instead, e.g. DinkUp / EverydayBible / AppealPath as separate rows,
+ * regardless of which GL account their revenue/expense posted to.
  */
-export async function generateLineItemTrends(userId, { months = 12 } = {}) {
+export async function generateLineItemTrends(userId, { months = 12, groupBy = 'account' } = {}) {
   const monthKeys = lastNMonthKeys(months);
   const windowStart = `${monthKeys[0]}-01`;
 
@@ -340,17 +345,49 @@ export async function generateLineItemTrends(userId, { months = 12 } = {}) {
     .order('account_number');
   if (acctError) throw acctError;
 
+  const { data: productLines, error: plError } = await supabase
+    .from('product_lines')
+    .select('id, service_line, department, product_name')
+    .eq('user_id', userId)
+    .order('service_line')
+    .order('department')
+    .order('product_name');
+  if (plError) throw plError;
+
   const { data: transactions, error: txError } = await supabase
     .from('transactions')
-    .select('amount, transaction_date, debit_account_id, credit_account_id')
+    .select('amount, transaction_date, debit_account_id, credit_account_id, product_line_id')
     .eq('user_id', userId)
     .gte('transaction_date', windowStart)
     .in('status', ['posted', 'reconciled']);
   if (txError) throw txError;
 
   const accountsById = new Map(accounts.map((a) => [a.id, a]));
-  // accountId -> monthKey -> cents
-  const totalsByAccount = new Map(accounts.map((a) => [a.id, new Map(monthKeys.map((m) => [m, 0]))]));
+  const productLinesById = new Map(productLines.map((p) => [p.id, p]));
+  const UNASSIGNED = '__unassigned__';
+
+  const accountLabel = (a) => ({ key: a.id, label: `${a.account_number} — ${a.account_name}`, sortKey: a.account_number });
+  const productLineLabel = (id) => {
+    if (id == null || !productLinesById.has(id)) {
+      return { key: UNASSIGNED, label: 'Unassigned / Overhead', sortKey: '￿' };
+    }
+    const p = productLinesById.get(id);
+    const path = [p.service_line, p.department, p.product_name].filter(Boolean).join(' › ');
+    return { key: id, label: path, sortKey: path };
+  };
+
+  // key -> monthKey -> cents, separately for revenue-type and expense-type activity
+  const revenueTotals = new Map();
+  const expenseTotals = new Map();
+  const labelsByKey = new Map();
+
+  const bucketFor = (map, entry) => {
+    if (!map.has(entry.key)) {
+      map.set(entry.key, new Map(monthKeys.map((m) => [m, 0])));
+      labelsByKey.set(entry.key, entry);
+    }
+    return map.get(entry.key);
+  };
 
   for (const tx of transactions) {
     const mKey = monthKey(tx.transaction_date);
@@ -359,37 +396,46 @@ export async function generateLineItemTrends(userId, { months = 12 } = {}) {
 
     const debitAccount = accountsById.get(tx.debit_account_id);
     if (debitAccount?.account_type === 'expense') {
-      const monthMap = totalsByAccount.get(debitAccount.id);
+      const entry = groupBy === 'productLine' ? productLineLabel(tx.product_line_id) : accountLabel(debitAccount);
+      const monthMap = bucketFor(expenseTotals, entry);
       monthMap.set(mKey, monthMap.get(mKey) + cents);
     }
 
     const creditAccount = accountsById.get(tx.credit_account_id);
     if (creditAccount?.account_type === 'revenue') {
-      const monthMap = totalsByAccount.get(creditAccount.id);
+      const entry = groupBy === 'productLine' ? productLineLabel(tx.product_line_id) : accountLabel(creditAccount);
+      const monthMap = bucketFor(revenueTotals, entry);
       monthMap.set(mKey, monthMap.get(mKey) + cents);
     }
   }
 
-  const lineItems = accounts
-    .map((account) => {
-      const monthMap = totalsByAccount.get(account.id);
-      const values = monthKeys.map((m) => monthMap.get(m));
-      const totalCents = values.reduce((sum, v) => sum + v, 0);
-      if (totalCents === 0) return null; // skip accounts with no activity in the window
+  const buildLineItems = (totalsMap, accountType) =>
+    Array.from(totalsMap.entries())
+      .map(([key, monthMap]) => {
+        const values = monthKeys.map((m) => monthMap.get(m));
+        const totalCents = values.reduce((sum, v) => sum + v, 0);
+        if (totalCents === 0) return null;
 
-      return {
-        accountId: account.id,
-        accountNumber: account.account_number,
-        accountName: account.account_name,
-        accountType: account.account_type,
-        monthlyTotals: Object.fromEntries(monthKeys.map((m, i) => [m, fromCents(values[i])])),
-        average: fromCents(Math.round(totalCents / months)),
-        high: fromCents(Math.max(...values)),
-        low: fromCents(Math.min(...values)),
-        total: fromCents(totalCents),
-      };
-    })
-    .filter(Boolean);
+        const { label, sortKey } = labelsByKey.get(key);
+        return {
+          key,
+          label,
+          sortKey,
+          accountType,
+          monthlyTotals: Object.fromEntries(monthKeys.map((m, i) => [m, fromCents(values[i])])),
+          average: fromCents(Math.round(totalCents / months)),
+          high: fromCents(Math.max(...values)),
+          low: fromCents(Math.min(...values)),
+          total: fromCents(totalCents),
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.sortKey.localeCompare(b.sortKey));
 
-  return { months: monthKeys, lineItems };
+  const lineItems = [
+    ...buildLineItems(revenueTotals, 'revenue'),
+    ...buildLineItems(expenseTotals, 'expense'),
+  ];
+
+  return { months: monthKeys, groupBy, lineItems };
 }
