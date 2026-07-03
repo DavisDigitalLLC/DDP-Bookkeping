@@ -4,6 +4,8 @@ import Navigation from './components/Navigation';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Transactions from './pages/Transactions';
+import Receipts from './pages/Receipts';
+import Guides from './pages/Guides';
 import Settings from './pages/Settings';
 
 function RequireAuth({ children }) {
@@ -31,6 +33,8 @@ export default function App() {
                 <Routes>
                   <Route path="/" element={<Dashboard />} />
                   <Route path="/transactions" element={<Transactions />} />
+                  <Route path="/receipts" element={<Receipts />} />
+                  <Route path="/guides" element={<Guides />} />
                   <Route path="/settings" element={<Settings />} />
                 </Routes>
               </main>

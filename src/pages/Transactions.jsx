@@ -1,13 +1,15 @@
+import { useLocation } from 'react-router-dom';
 import TransactionEntry from '../components/TransactionEntry';
 import { useTransactions } from '../hooks/useTransactions';
 
 export default function Transactions() {
   const { transactions, refetch } = useTransactions({ limit: 50 });
+  const location = useLocation();
 
   return (
     <div>
       <h2>New Transaction</h2>
-      <TransactionEntry onPosted={refetch} />
+      <TransactionEntry onPosted={refetch} prefill={location.state?.prefill} />
 
       <div className="card">
         <h3>All transactions</h3>

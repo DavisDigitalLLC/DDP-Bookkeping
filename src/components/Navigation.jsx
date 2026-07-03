@@ -13,6 +13,12 @@ export default function Navigation() {
       <NavLink to="/transactions" className={({ isActive }) => (isActive ? 'active' : '')}>
         Transactions
       </NavLink>
+      <NavLink to="/receipts" className={({ isActive }) => (isActive ? 'active' : '')}>
+        Receipts
+      </NavLink>
+      <NavLink to="/guides" className={({ isActive }) => (isActive ? 'active' : '')}>
+        Deduction Guides
+      </NavLink>
       <NavLink to="/settings" className={({ isActive }) => (isActive ? 'active' : '')}>
         Settings & Chart of Accounts
       </NavLink>

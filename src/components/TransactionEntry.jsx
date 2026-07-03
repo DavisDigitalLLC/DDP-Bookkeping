@@ -1,6 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useChartOfAccounts, useExpenseCategories, useProductLines } from '../hooks/useChartOfAccounts';
 import { useTransactions } from '../hooks/useTransactions';
+import { findGuideForCategory } from '../lib/deductionGuides';
 
 const DEDUCTION_TOOLTIPS = {
   office_supplies:
@@ -14,7 +16,7 @@ const DEDUCTION_TOOLTIPS = {
   personal_expenses: 'Not deductible. Use this to keep personal spending out of your P&L, on purpose.',
 };
 
-export default function TransactionEntry({ onPosted }) {
+export default function TransactionEntry({ onPosted, prefill }) {
   const { accounts } = useChartOfAccounts();
   const { productLines } = useProductLines();
   const { categories } = useExpenseCategories();
@@ -29,9 +31,18 @@ export default function TransactionEntry({ onPosted }) {
   const [productLineId, setProductLineId] = useState('');
   const [expenseCategoryId, setExpenseCategoryId] = useState('');
   const [isTaxDeductible, setIsTaxDeductible] = useState(true);
+  const [receiptId, setReceiptId] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  useEffect(() => {
+    if (!prefill) return;
+    if (prefill.amount != null) setAmount(String(prefill.amount));
+    if (prefill.description) setDescription(prefill.description);
+    if (prefill.transactionDate) setTransactionDate(prefill.transactionDate);
+    if (prefill.receiptId) setReceiptId(prefill.receiptId);
+  }, [prefill]);
 
   const moneyAccounts = useMemo(
     () => accounts.filter((a) => a.account_type === 'asset' || a.account_type === 'liability'),
@@ -57,6 +68,7 @@ export default function TransactionEntry({ onPosted }) {
     setProductLineId('');
     setExpenseCategoryId('');
     setIsTaxDeductible(true);
+    setReceiptId(null);
   };
 
   const handleSubmit = async (e) => {
@@ -83,6 +95,7 @@ export default function TransactionEntry({ onPosted }) {
         productLineId: productLineId || null,
         expenseCategoryId: entryType === 'expense' ? expenseCategoryId || null : null,
         isTaxDeductible: entryType === 'expense' ? isTaxDeductible : null,
+        receiptId: receiptId || null,
       });
 
       setSuccess('Transaction posted.');
@@ -98,6 +111,7 @@ export default function TransactionEntry({ onPosted }) {
   return (
     <div className="card">
       <h3>New {entryType === 'expense' ? 'Expense' : 'Income'}</h3>
+      {receiptId && <p className="tooltip-hint">Attached to scanned receipt.</p>}
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
         <button
           type="button"
@@ -216,7 +230,17 @@ export default function TransactionEntry({ onPosted }) {
                 ))}
               </select>
               {selectedCategory && DEDUCTION_TOOLTIPS[selectedCategory.category_code] && (
-                <p className="tooltip-hint">{DEDUCTION_TOOLTIPS[selectedCategory.category_code]}</p>
+                <p className="tooltip-hint">
+                  {DEDUCTION_TOOLTIPS[selectedCategory.category_code]}
+                  {findGuideForCategory(selectedCategory.category_code) && (
+                    <>
+                      {' '}
+                      <Link to={`/guides#${findGuideForCategory(selectedCategory.category_code).slug}`}>
+                        Read the full guide →
+                      </Link>
+                    </>
+                  )}
+                </p>
               )}
             </div>
 
