@@ -19,6 +19,9 @@ export default function Navigation() {
       <NavLink to="/guides" className={({ isActive }) => (isActive ? 'active' : '')}>
         Deduction Guides
       </NavLink>
+      <NavLink to="/reconciliation" className={({ isActive }) => (isActive ? 'active' : '')}>
+        Bank Reconciliation
+      </NavLink>
       <NavLink to="/settings" className={({ isActive }) => (isActive ? 'active' : '')}>
         Settings & Chart of Accounts
       </NavLink>
