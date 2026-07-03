@@ -7,6 +7,7 @@ import Transactions from './pages/Transactions';
 import Receipts from './pages/Receipts';
 import Guides from './pages/Guides';
 import Reconciliation from './pages/Reconciliation';
+import Trends from './pages/Trends';
 import Settings from './pages/Settings';
 
 function RequireAuth({ children }) {
@@ -37,6 +38,7 @@ export default function App() {
                   <Route path="/receipts" element={<Receipts />} />
                   <Route path="/guides" element={<Guides />} />
                   <Route path="/reconciliation" element={<Reconciliation />} />
+                  <Route path="/trends" element={<Trends />} />
                   <Route path="/settings" element={<Settings />} />
                 </Routes>
               </main>

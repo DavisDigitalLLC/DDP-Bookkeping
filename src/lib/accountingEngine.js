@@ -307,3 +307,89 @@ export async function generateBalanceSheet(userId, asOfDate = new Date().toISOSt
     },
   };
 }
+
+function monthKey(dateStr) {
+  return dateStr.slice(0, 7); // 'YYYY-MM'
+}
+
+function lastNMonthKeys(n, endDate = new Date()) {
+  const keys = [];
+  const cursor = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date(cursor.getFullYear(), cursor.getMonth() - i, 1);
+    keys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+  }
+  return keys;
+}
+
+/**
+ * Month-over-month trend per GL line item (revenue/expense account) over a
+ * rolling window, with the average/high/low/total across that window --
+ * mirrors how a trailing-twelve-month (TTM) report reads.
+ */
+export async function generateLineItemTrends(userId, { months = 12 } = {}) {
+  const monthKeys = lastNMonthKeys(months);
+  const windowStart = `${monthKeys[0]}-01`;
+
+  const { data: accounts, error: acctError } = await supabase
+    .from('chart_of_accounts')
+    .select('id, account_number, account_name, account_type')
+    .eq('user_id', userId)
+    .in('account_type', ['revenue', 'expense'])
+    .eq('is_active', true)
+    .order('account_number');
+  if (acctError) throw acctError;
+
+  const { data: transactions, error: txError } = await supabase
+    .from('transactions')
+    .select('amount, transaction_date, debit_account_id, credit_account_id')
+    .eq('user_id', userId)
+    .gte('transaction_date', windowStart)
+    .in('status', ['posted', 'reconciled']);
+  if (txError) throw txError;
+
+  const accountsById = new Map(accounts.map((a) => [a.id, a]));
+  // accountId -> monthKey -> cents
+  const totalsByAccount = new Map(accounts.map((a) => [a.id, new Map(monthKeys.map((m) => [m, 0]))]));
+
+  for (const tx of transactions) {
+    const mKey = monthKey(tx.transaction_date);
+    if (!monthKeys.includes(mKey)) continue;
+    const cents = toCents(tx.amount);
+
+    const debitAccount = accountsById.get(tx.debit_account_id);
+    if (debitAccount?.account_type === 'expense') {
+      const monthMap = totalsByAccount.get(debitAccount.id);
+      monthMap.set(mKey, monthMap.get(mKey) + cents);
+    }
+
+    const creditAccount = accountsById.get(tx.credit_account_id);
+    if (creditAccount?.account_type === 'revenue') {
+      const monthMap = totalsByAccount.get(creditAccount.id);
+      monthMap.set(mKey, monthMap.get(mKey) + cents);
+    }
+  }
+
+  const lineItems = accounts
+    .map((account) => {
+      const monthMap = totalsByAccount.get(account.id);
+      const values = monthKeys.map((m) => monthMap.get(m));
+      const totalCents = values.reduce((sum, v) => sum + v, 0);
+      if (totalCents === 0) return null; // skip accounts with no activity in the window
+
+      return {
+        accountId: account.id,
+        accountNumber: account.account_number,
+        accountName: account.account_name,
+        accountType: account.account_type,
+        monthlyTotals: Object.fromEntries(monthKeys.map((m, i) => [m, fromCents(values[i])])),
+        average: fromCents(Math.round(totalCents / months)),
+        high: fromCents(Math.max(...values)),
+        low: fromCents(Math.min(...values)),
+        total: fromCents(totalCents),
+      };
+    })
+    .filter(Boolean);
+
+  return { months: monthKeys, lineItems };
+}
