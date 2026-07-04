@@ -21,7 +21,7 @@ export default function TransactionEntry({ onPosted, prefill, editingTransaction
   const { accounts } = useChartOfAccounts();
   const { productLines } = useProductLines();
   const { categories } = useExpenseCategories();
-  const { postTransaction, postSplitTransaction, updateTransaction } = useTransactions();
+  const { postTransaction, postSplitTransaction, updateTransaction, deleteTransaction } = useTransactions();
   const { vendors, getOrCreateVendor } = useVendors();
 
   const [transactionId, setTransactionId] = useState(null);
@@ -149,7 +149,19 @@ export default function TransactionEntry({ onPosted, prefill, editingTransaction
         vendorId: vendor?.id ?? null,
       };
 
-      if (isEditing) {
+      if (isEditing && splitMode) {
+        // A split is really several rows, not one -- post the new split
+        // rows first, and only remove the original once that succeeds, so
+        // a failure here never loses the original transaction.
+        const productLineLabelsById = Object.fromEntries(productLines.map((p) => [p.id, p.product_name]));
+        const posted = await postSplitTransaction({
+          ...payload,
+          productLineIds: splitProductLineIds,
+          productLineLabelsById,
+        });
+        await deleteTransaction(transactionId);
+        setSuccess(`Replaced with a split across ${posted.length} product lines.`);
+      } else if (isEditing) {
         await updateTransaction({ transactionId, ...payload, productLineId: productLineId || null });
         setSuccess('Transaction updated.');
       } else if (splitMode) {
@@ -307,25 +319,28 @@ export default function TransactionEntry({ onPosted, prefill, editingTransaction
             <label htmlFor="productLine" style={{ marginBottom: 0 }}>
               Product line
             </label>
-            {!isEditing && (
-              <label style={{ fontWeight: 400, fontSize: '0.85rem' }}>
-                <input
-                  type="checkbox"
-                  checked={splitMode}
-                  onChange={(e) => {
-                    setSplitMode(e.target.checked);
-                    setSplitProductLineIds([]);
-                    setProductLineId('');
-                  }}
-                  style={{ width: 'auto', marginRight: 6 }}
-                />
-                Split across multiple
-              </label>
-            )}
+            <label style={{ fontWeight: 400, fontSize: '0.85rem' }}>
+              <input
+                type="checkbox"
+                checked={splitMode}
+                onChange={(e) => {
+                  setSplitMode(e.target.checked);
+                  setSplitProductLineIds([]);
+                  setProductLineId('');
+                }}
+                style={{ width: 'auto', marginRight: 6 }}
+              />
+              Split across multiple
+            </label>
           </div>
 
           {splitMode ? (
             <>
+              {isEditing && (
+                <p className="tooltip-hint">
+                  This will replace the original transaction with one new transaction per product line selected below.
+                </p>
+              )}
               <div
                 style={{
                   display: 'flex',
@@ -413,7 +428,13 @@ export default function TransactionEntry({ onPosted, prefill, editingTransaction
 
         <div style={{ display: 'flex', gap: 8 }}>
           <button type="submit" disabled={submitting}>
-            {submitting ? 'Saving…' : isEditing ? 'Update transaction' : 'Post transaction'}
+            {submitting
+              ? 'Saving…'
+              : isEditing && splitMode
+                ? 'Replace with split'
+                : isEditing
+                  ? 'Update transaction'
+                  : 'Post transaction'}
           </button>
           {isEditing && (
             <button type="button" className="secondary" onClick={handleCancelEdit} disabled={submitting}>
