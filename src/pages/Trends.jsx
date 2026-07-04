@@ -16,6 +16,12 @@ function money(n) {
   return n === 0 ? '—' : `$${Number(n).toFixed(2)}`;
 }
 
+const LABEL_MAX_CHARS = 22;
+function truncateLabel(label) {
+  if (!label || label.length <= LABEL_MAX_CHARS) return label;
+  return `${label.slice(0, LABEL_MAX_CHARS - 1)}…`;
+}
+
 const stickyLeftBase = {
   position: 'sticky',
   background: 'var(--color-surface)',
@@ -101,7 +107,7 @@ function TrendTable({ title, rows, months, description }) {
                     fontWeight: row.bold ? 600 : 400,
                   }}
                 >
-                  {row.label}
+                  {truncateLabel(row.label)}
                 </td>
                 {months.map((m) => (
                   <td key={m} style={{ textAlign: 'right', whiteSpace: 'nowrap', padding: '10px 14px', fontWeight: row.bold ? 600 : 400 }}>
