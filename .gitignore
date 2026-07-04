@@ -22,3 +22,6 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 SRK.rtf
+
+# local Claude Code permission overrides -- personal, not team-shared
+.claude/settings.local.json

@@ -1,12 +1,16 @@
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import monogram from '../assets/ddp-monogram-transparent.png';
 
 export default function Navigation() {
   const { signOut, user } = useAuth();
 
   return (
     <nav className="nav">
-      <div className="nav-brand">DDP Bookkeeping</div>
+      <div className="nav-brand">
+        <img src={monogram} alt="DDP" className="nav-logo" />
+        <span>DDP Bookkeeping</span>
+      </div>
       <NavLink to="/" end className={({ isActive }) => (isActive ? 'active' : '')}>
         Dashboard
       </NavLink>

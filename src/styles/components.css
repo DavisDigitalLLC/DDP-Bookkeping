@@ -70,11 +70,22 @@ h1, h2, h3, h4, .nav-brand, .metric-value {
 }
 
 .nav-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
   font-weight: 700;
-  font-size: 1.1rem;
-  margin-bottom: 16px;
-  padding: 0 8px;
+  font-size: 1rem;
+  margin-bottom: 20px;
+  padding: 4px 8px 16px;
   color: var(--ddp-white);
+  text-align: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.nav-logo {
+  width: 72px;
+  height: auto;
 }
 
 .nav a {
@@ -219,9 +230,18 @@ th {
 .auth-shell {
   min-height: 100vh;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 28px;
   background: var(--ddp-primary-gradient);
+  padding: 24px;
+}
+
+.auth-banner {
+  width: 100%;
+  max-width: 420px;
+  height: auto;
 }
 
 .auth-card {

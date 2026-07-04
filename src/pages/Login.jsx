@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
+import banner from '../assets/banner-original.png';
 
 export default function Login() {
   const { signIn, signUp } = useAuth();
@@ -34,6 +35,7 @@ export default function Login() {
 
   return (
     <div className="auth-shell">
+      <img src={banner} alt="DDP Bookkeeping" className="auth-banner" />
       <div className="card auth-card">
         <h2>{mode === 'signup' ? 'Create your account' : 'Sign in to DDP Bookkeeping'}</h2>
         <form onSubmit={handleSubmit}>
