@@ -1,4 +1,5 @@
 import ChartOfAccounts from '../components/ChartOfAccounts';
+import ProfileSettings from '../components/ProfileSettings';
 import { useProductLines } from '../hooks/useChartOfAccounts';
 
 export default function Settings() {
@@ -7,6 +8,8 @@ export default function Settings() {
   return (
     <div>
       <h2>Settings</h2>
+
+      <ProfileSettings />
 
       <div className="card">
         <h3>Product Lines</h3>

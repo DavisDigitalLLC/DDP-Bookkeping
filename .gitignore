@@ -27,3 +27,6 @@ SRK.rtf
 .claude/settings.local.json
 .vercel
 .env*
+
+# contains plaintext credentials -- never commit
+PROJECT_REFERENCE.md

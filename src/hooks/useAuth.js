@@ -43,6 +43,18 @@ export function AuthProvider({ children }) {
     if (error) throw error;
   };
 
+  const changePassword = async ({ currentPassword, newPassword }) => {
+    const email = session?.user?.email;
+    if (!email) throw new Error('You must be signed in to change your password.');
+
+    // Re-verify identity with the current password before changing it.
+    const { error: verifyError } = await supabase.auth.signInWithPassword({ email, password: currentPassword });
+    if (verifyError) throw new Error('Current password is incorrect.');
+
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) throw error;
+  };
+
   const value = {
     session,
     user: session?.user ?? null,
@@ -50,6 +62,7 @@ export function AuthProvider({ children }) {
     signUp,
     signIn,
     signOut,
+    changePassword,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
