@@ -53,14 +53,15 @@ function toRow({ level, label, glNumber = '', monthKeys, monthCentsMap, bold = f
 }
 
 /**
- * Deterministic, display-only 4-digit numbering for the revenue hierarchy
- * (Service Line -> Department -> Product). These are report labels, not
- * real posting accounts -- kept in a 4100-4299 block reserved for this so
- * they never collide with the actual GL revenue accounts (4000/4010/...).
+ * Deterministic, display-only 4-digit numbering for a Service Line ->
+ * Department -> Product hierarchy. These are report labels, not real
+ * posting accounts -- kept in a reserved block (base..base+199) so they
+ * never collide with real GL accounts (4000s for revenue, 6000s for
+ * expense).
  */
-function buildRevenueNumbering(bySL) {
+function buildProductNumbering(bySL, base) {
   const numbers = new Map(); // 'serviceLine' | 'serviceLine|department' | 'serviceLine|department|product' -> number
-  let nextSlBase = 4100;
+  let nextSlBase = base;
   for (const [serviceLine, byDept] of bySL.entries()) {
     const slBase = nextSlBase;
     numbers.set(serviceLine, slBase);
@@ -86,13 +87,99 @@ function buildRevenueNumbering(bySL) {
 }
 
 /**
+ * Groups product_lines into Service Line -> Department -> [products], and
+ * builds Service Line/Department/Product rows (with subtotals) plus an
+ * Unassigned/Overhead row and a grand total, from a byProduct cents map
+ * (productLineId | '__unassigned__' -> monthMap).
+ */
+function buildProductHierarchyRows({ byProduct, productLines, monthKeys, numberingBase, totalLabel }) {
+  const rows = [];
+  const totalCents = zeroMonthMap(monthKeys);
+
+  const bySL = new Map();
+  for (const p of productLines) {
+    if (!bySL.has(p.service_line)) bySL.set(p.service_line, new Map());
+    const byDept = bySL.get(p.service_line);
+    const deptKey = p.department ?? '';
+    if (!byDept.has(deptKey)) byDept.set(deptKey, []);
+    byDept.get(deptKey).push(p);
+  }
+  const numbers = buildProductNumbering(bySL, numberingBase);
+
+  for (const [serviceLine, byDept] of bySL.entries()) {
+    const slCents = zeroMonthMap(monthKeys);
+    const slRows = [];
+
+    for (const [department, products] of byDept.entries()) {
+      const deptCents = zeroMonthMap(monthKeys);
+      const deptRows = [];
+
+      for (const product of products) {
+        const productCents = byProduct.get(product.id) ?? zeroMonthMap(monthKeys);
+        deptRows.push(
+          toRow({
+            level: 2,
+            label: product.product_name,
+            glNumber: numbers.get(`${serviceLine}|${department}|${product.id}`) ?? '',
+            monthKeys,
+            monthCentsMap: productCents,
+          })
+        );
+        addInto(deptCents, productCents);
+      }
+
+      addInto(slCents, deptCents);
+      if (department) {
+        slRows.push(
+          toRow({
+            level: 1,
+            label: department,
+            glNumber: numbers.get(`${serviceLine}|${department}`) ?? '',
+            monthKeys,
+            monthCentsMap: deptCents,
+            bold: true,
+          })
+        );
+      }
+      slRows.push(...deptRows);
+    }
+
+    rows.push(
+      toRow({
+        level: 0,
+        label: serviceLine,
+        glNumber: numbers.get(serviceLine) ?? '',
+        monthKeys,
+        monthCentsMap: slCents,
+        bold: true,
+      })
+    );
+    rows.push(...slRows);
+    addInto(totalCents, slCents);
+  }
+
+  const unassigned = byProduct.get('__unassigned__');
+  if (unassigned && [...unassigned.values()].some((v) => v !== 0)) {
+    rows.push(toRow({ level: 0, label: 'Unassigned / Overhead', monthKeys, monthCentsMap: unassigned, bold: true }));
+    addInto(totalCents, unassigned);
+  }
+
+  const totalRow = toRow({ level: 0, label: totalLabel, monthKeys, monthCentsMap: totalCents, bold: true });
+  rows.push(totalRow);
+
+  return { rows, totalRow };
+}
+
+/**
  * Hierarchical trend report over an explicit [startMonth, endMonth] range
  * (both 'YYYY-MM', inclusive):
  *  - Revenue: Service Line -> Department -> Product, each with subtotals,
  *    followed by a Total Revenue row.
+ *  - Expenses by Product Line: same Service Line -> Department -> Product
+ *    breakdown, but for expense-side activity -- cost-center view, mirrors
+ *    the Revenue section.
  *  - Operating Expenses: one row per GL account, broken into vendor
- *    sub-rows (grouped by transaction description), followed by a Total
- *    Operating Expenses row.
+ *    sub-rows, followed by a Total Operating Expenses row.
  *  - Fixed Expenses: one row per GL account (Taxes, Payroll, ...), no
  *    vendor breakout, followed by a Total Fixed Expenses row.
  *  - Summary: Total Revenue, Total Operating Expenses, Total Fixed
@@ -143,6 +230,7 @@ export async function generateHierarchicalTrends(userId, { startMonth, endMonth 
   // Bucket transaction activity
   // ---------------------------------------------------------------------
   const revenueByProduct = new Map(); // productLineId | '__unassigned__' -> monthMap(cents)
+  const expenseByProduct = new Map(); // productLineId | '__unassigned__' -> monthMap(cents)
   const expenseByAccountVendor = new Map(); // accountId -> vendor -> monthMap(cents)
 
   const getBucket = (map, key, factory) => {
@@ -164,6 +252,10 @@ export async function generateHierarchicalTrends(userId, { startMonth, endMonth 
 
     const debitAccount = accountsById.get(tx.debit_account_id);
     if (debitAccount?.account_type === 'expense') {
+      const productKey = tx.product_line_id ?? '__unassigned__';
+      const productMonthMap = getBucket(expenseByProduct, productKey, () => zeroMonthMap(monthKeys));
+      productMonthMap.set(mKey, productMonthMap.get(mKey) + cents);
+
       const vendorMap = getBucket(expenseByAccountVendor, debitAccount.id, () => new Map());
       // Prefer the vendor entity (rename-safe); fall back to the raw
       // description for older rows posted before vendors existed.
@@ -174,83 +266,24 @@ export async function generateHierarchicalTrends(userId, { startMonth, endMonth 
   }
 
   // ---------------------------------------------------------------------
-  // Revenue: Service Line -> Department -> Product
+  // Revenue and Expenses-by-product-line: both Service Line -> Department
+  // -> Product, built the same way.
   // ---------------------------------------------------------------------
-  const revenueRows = [];
-  const totalRevenueCents = zeroMonthMap(monthKeys);
+  const { rows: revenueRows, totalRow: totalRevenueRow } = buildProductHierarchyRows({
+    byProduct: revenueByProduct,
+    productLines,
+    monthKeys,
+    numberingBase: 4100,
+    totalLabel: 'Total Revenue',
+  });
 
-  const bySL = new Map();
-  for (const p of productLines) {
-    if (!bySL.has(p.service_line)) bySL.set(p.service_line, new Map());
-    const byDept = bySL.get(p.service_line);
-    const deptKey = p.department ?? '';
-    if (!byDept.has(deptKey)) byDept.set(deptKey, []);
-    byDept.get(deptKey).push(p);
-  }
-  const revenueNumbers = buildRevenueNumbering(bySL);
-
-  for (const [serviceLine, byDept] of bySL.entries()) {
-    const slCents = zeroMonthMap(monthKeys);
-    const slRows = [];
-
-    for (const [department, products] of byDept.entries()) {
-      const deptCents = zeroMonthMap(monthKeys);
-      const deptRows = [];
-
-      for (const product of products) {
-        const productCents = revenueByProduct.get(product.id) ?? zeroMonthMap(monthKeys);
-        deptRows.push(
-          toRow({
-            level: 2,
-            label: product.product_name,
-            glNumber: revenueNumbers.get(`${serviceLine}|${department}|${product.id}`) ?? '',
-            monthKeys,
-            monthCentsMap: productCents,
-          })
-        );
-        addInto(deptCents, productCents);
-      }
-
-      addInto(slCents, deptCents);
-      if (department) {
-        slRows.push(
-          toRow({
-            level: 1,
-            label: department,
-            glNumber: revenueNumbers.get(`${serviceLine}|${department}`) ?? '',
-            monthKeys,
-            monthCentsMap: deptCents,
-            bold: true,
-          })
-        );
-      }
-      slRows.push(...deptRows);
-    }
-
-    revenueRows.push(
-      toRow({
-        level: 0,
-        label: serviceLine,
-        glNumber: revenueNumbers.get(serviceLine) ?? '',
-        monthKeys,
-        monthCentsMap: slCents,
-        bold: true,
-      })
-    );
-    revenueRows.push(...slRows);
-    addInto(totalRevenueCents, slCents);
-  }
-
-  const unassignedRevenue = revenueByProduct.get('__unassigned__');
-  if (unassignedRevenue && [...unassignedRevenue.values()].some((v) => v !== 0)) {
-    revenueRows.push(
-      toRow({ level: 0, label: 'Unassigned / Overhead', monthKeys, monthCentsMap: unassignedRevenue, bold: true })
-    );
-    addInto(totalRevenueCents, unassignedRevenue);
-  }
-
-  const totalRevenueRow = toRow({ level: 0, label: 'Total Revenue', monthKeys, monthCentsMap: totalRevenueCents, bold: true });
-  revenueRows.push(totalRevenueRow);
+  const { rows: expenseByProductRows } = buildProductHierarchyRows({
+    byProduct: expenseByProduct,
+    productLines,
+    monthKeys,
+    numberingBase: 6100,
+    totalLabel: 'Total Expenses',
+  });
 
   // ---------------------------------------------------------------------
   // Expenses: Operating (with vendor breakout) and Fixed (flat)
@@ -342,5 +375,5 @@ export async function generateHierarchicalTrends(userId, { startMonth, endMonth 
     toRow({ level: 0, label: 'Net Income', monthKeys, monthCentsMap: netIncomeCents, bold: true }),
   ];
 
-  return { months: monthKeys, revenueRows, operatingRows, fixedRows, summaryRows };
+  return { months: monthKeys, revenueRows, expenseByProductRows, operatingRows, fixedRows, summaryRows };
 }

@@ -126,7 +126,7 @@ export function useProductLines() {
   }, [refetch]);
 
   const createProductLine = useCallback(
-    async ({ serviceLine, department, productName, description }) => {
+    async ({ serviceLine, department, productName, description, defaultRevenueAccountId, defaultExpenseAccountId }) => {
       const { data, error } = await supabase
         .from('product_lines')
         .insert({
@@ -136,6 +136,8 @@ export function useProductLines() {
           product_name: productName,
           product_slug: slugify(productName),
           description: description || null,
+          default_revenue_account_id: defaultRevenueAccountId || null,
+          default_expense_account_id: defaultExpenseAccountId || null,
         })
         .select()
         .single();
@@ -147,7 +149,10 @@ export function useProductLines() {
   );
 
   const updateProductLine = useCallback(
-    async (productLineId, { serviceLine, department, productName, description }) => {
+    async (
+      productLineId,
+      { serviceLine, department, productName, description, defaultRevenueAccountId, defaultExpenseAccountId }
+    ) => {
       const { data, error } = await supabase
         .from('product_lines')
         .update({
@@ -156,6 +161,8 @@ export function useProductLines() {
           product_name: productName,
           product_slug: slugify(productName),
           description: description || null,
+          default_revenue_account_id: defaultRevenueAccountId || null,
+          default_expense_account_id: defaultExpenseAccountId || null,
         })
         .eq('id', productLineId)
         .eq('user_id', user.id)

@@ -1,11 +1,18 @@
 import { useState } from 'react';
-import { useProductLines } from '../hooks/useChartOfAccounts';
+import { useChartOfAccounts, useProductLines } from '../hooks/useChartOfAccounts';
 
 function emptyForm() {
-  return { serviceLine: '', department: '', productName: '', description: '' };
+  return {
+    serviceLine: '',
+    department: '',
+    productName: '',
+    description: '',
+    defaultRevenueAccountId: '',
+    defaultExpenseAccountId: '',
+  };
 }
 
-function ProductLineForm({ initial, isEditing, serviceLineOptions, departmentOptions, onSubmit, onCancel }) {
+function ProductLineForm({ initial, isEditing, serviceLineOptions, departmentOptions, revenueAccounts, expenseAccounts, onSubmit, onCancel }) {
   const [form, setForm] = useState(initial ?? emptyForm());
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -53,6 +60,31 @@ function ProductLineForm({ initial, isEditing, serviceLineOptions, departmentOpt
         <label htmlFor="plDescription">Description</label>
         <input id="plDescription" value={form.description} onChange={set('description')} />
       </div>
+      <div className="form-row">
+        <label htmlFor="defaultRevenueAccountId">Default revenue account (optional)</label>
+        <select id="defaultRevenueAccountId" value={form.defaultRevenueAccountId} onChange={set('defaultRevenueAccountId')}>
+          <option value="">None -- choose manually each time</option>
+          {revenueAccounts.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.account_number} — {a.account_name}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="form-row">
+        <label htmlFor="defaultExpenseAccountId">Default expense account (optional)</label>
+        <select id="defaultExpenseAccountId" value={form.defaultExpenseAccountId} onChange={set('defaultExpenseAccountId')}>
+          <option value="">None -- choose manually each time</option>
+          {expenseAccounts.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.account_number} — {a.account_name}
+            </option>
+          ))}
+        </select>
+        <p className="tooltip-hint">
+          When set, Transaction Entry auto-fills this account once this product line is picked (still overridable).
+        </p>
+      </div>
       {error && <p className="error-text">{error}</p>}
       <div style={{ display: 'flex', gap: 8 }}>
         <button type="submit" disabled={submitting}>
@@ -68,9 +100,14 @@ function ProductLineForm({ initial, isEditing, serviceLineOptions, departmentOpt
 
 export default function ProductLines() {
   const { productLines, loading, createProductLine, updateProductLine, setProductLineActive } = useProductLines();
+  const { accounts } = useChartOfAccounts();
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [error, setError] = useState('');
+
+  const revenueAccounts = accounts.filter((a) => a.account_type === 'revenue');
+  const expenseAccounts = accounts.filter((a) => a.account_type === 'expense');
+  const accountsById = new Map(accounts.map((a) => [a.id, a]));
 
   const serviceLineOptions = [...new Set(productLines.map((p) => p.service_line))];
   const departmentOptions = [...new Set(productLines.map((p) => p.department).filter(Boolean))];
@@ -88,6 +125,8 @@ export default function ProductLines() {
     }
   };
 
+  const formProps = { serviceLineOptions, departmentOptions, revenueAccounts, expenseAccounts };
+
   return (
     <div className="card">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -103,8 +142,7 @@ export default function ProductLines() {
 
       {adding && (
         <ProductLineForm
-          serviceLineOptions={serviceLineOptions}
-          departmentOptions={departmentOptions}
+          {...formProps}
           onCancel={() => setAdding(false)}
           onSubmit={async (form) => {
             await createProductLine(form);
@@ -116,13 +154,14 @@ export default function ProductLines() {
       {editingProductLine && (
         <ProductLineForm
           isEditing
-          serviceLineOptions={serviceLineOptions}
-          departmentOptions={departmentOptions}
+          {...formProps}
           initial={{
             serviceLine: editingProductLine.service_line,
             department: editingProductLine.department ?? '',
             productName: editingProductLine.product_name,
             description: editingProductLine.description ?? '',
+            defaultRevenueAccountId: editingProductLine.default_revenue_account_id ?? '',
+            defaultExpenseAccountId: editingProductLine.default_expense_account_id ?? '',
           }}
           onCancel={() => setEditingId(null)}
           onSubmit={async (form) => {
@@ -141,33 +180,38 @@ export default function ProductLines() {
               <th>Service Line</th>
               <th>Department</th>
               <th>Product</th>
+              <th>Default account</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
-            {productLines.map((p) => (
-              <tr key={p.id}>
-                <td>{p.service_line}</td>
-                <td>{p.department ?? '—'}</td>
-                <td>{p.product_name}</td>
-                <td style={{ whiteSpace: 'nowrap' }}>
-                  <button
-                    type="button"
-                    className="secondary"
-                    style={{ marginRight: 6 }}
-                    onClick={() => {
-                      setAdding(false);
-                      setEditingId(p.id);
-                    }}
-                  >
-                    Edit
-                  </button>
-                  <button type="button" className="secondary" onClick={() => handleDeactivate(p)}>
-                    Deactivate
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {productLines.map((p) => {
+              const defaultAccount = accountsById.get(p.default_revenue_account_id) ?? accountsById.get(p.default_expense_account_id);
+              return (
+                <tr key={p.id}>
+                  <td>{p.service_line}</td>
+                  <td>{p.department ?? '—'}</td>
+                  <td>{p.product_name}</td>
+                  <td>{defaultAccount ? `${defaultAccount.account_number} — ${defaultAccount.account_name}` : '—'}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    <button
+                      type="button"
+                      className="secondary"
+                      style={{ marginRight: 6 }}
+                      onClick={() => {
+                        setAdding(false);
+                        setEditingId(p.id);
+                      }}
+                    >
+                      Edit
+                    </button>
+                    <button type="button" className="secondary" onClick={() => handleDeactivate(p)}>
+                      Deactivate
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       )}

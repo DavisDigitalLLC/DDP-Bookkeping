@@ -41,8 +41,19 @@ export default function Navigation() {
         Tax Export
       </NavLink>
 
+      <div className="nav-section-label">Manage</div>
+      <NavLink to="/manage/products" className={({ isActive }) => (isActive ? 'active' : '')}>
+        Products
+      </NavLink>
+      <NavLink to="/manage/vendors" className={({ isActive }) => (isActive ? 'active' : '')}>
+        Vendors
+      </NavLink>
+      <NavLink to="/manage/accounts" className={({ isActive }) => (isActive ? 'active' : '')}>
+        Chart of Accounts
+      </NavLink>
+
       <NavLink to="/settings" className={({ isActive }) => (isActive ? 'active' : '')}>
-        Settings & Chart of Accounts
+        Settings
       </NavLink>
       <div style={{ marginTop: 'auto', paddingTop: 16 }}>
         <p className="tooltip-hint" style={{ padding: '0 8px' }}>{user?.email}</p>

@@ -59,5 +59,34 @@ export function useVendors() {
     [user, vendors, refetch]
   );
 
-  return { vendors, loading, refetch, getOrCreateVendor };
+  const updateVendor = useCallback(
+    async (vendorId, { vendorName }) => {
+      const { data, error } = await supabase
+        .from('vendors')
+        .update({ vendor_name: vendorName.trim() })
+        .eq('id', vendorId)
+        .eq('user_id', user.id)
+        .select()
+        .single();
+      if (error) throw error;
+      await refetch();
+      return data;
+    },
+    [user, refetch]
+  );
+
+  const setVendorActive = useCallback(
+    async (vendorId, isActive) => {
+      const { error } = await supabase
+        .from('vendors')
+        .update({ is_active: isActive })
+        .eq('id', vendorId)
+        .eq('user_id', user.id);
+      if (error) throw error;
+      await refetch();
+    },
+    [user, refetch]
+  );
+
+  return { vendors, loading, refetch, getOrCreateVendor, updateVendor, setVendorActive };
 }

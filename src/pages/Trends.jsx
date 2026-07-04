@@ -158,8 +158,8 @@ export default function Trends() {
     <div>
       <h2>Trends</h2>
       <p className="tooltip-hint" style={{ marginBottom: 16 }}>
-        Revenue by Service Line › Department › Product, expenses by GL account (operating expenses broken out by
-        vendor), from {startMonth} through {endMonth}.
+        Revenue and expenses by Service Line › Department › Product, plus expenses by GL account and vendor, from{' '}
+        {startMonth} through {endMonth}.
       </p>
 
       <div style={{ display: 'flex', gap: 20, marginBottom: 20, flexWrap: 'wrap', alignItems: 'flex-end' }}>
@@ -207,8 +207,14 @@ export default function Trends() {
         <>
           <TrendTable title="Revenue" rows={trends?.revenueRows} months={trends?.months ?? []} />
           <TrendTable
-            title="Operating Expenses"
-            description="Each account is broken into vendors based on transaction description."
+            title="Expenses by Service Line / Department / Product"
+            description="Same cost-center breakdown as Revenue, but for expense-side activity -- where is the money actually going, by product."
+            rows={trends?.expenseByProductRows}
+            months={trends?.months ?? []}
+          />
+          <TrendTable
+            title="Expenses by GL Account"
+            description="Each account is broken into vendors."
             rows={trends?.operatingRows}
             months={trends?.months ?? []}
           />

@@ -110,6 +110,14 @@ export default function TransactionEntry({ onPosted, prefill, editingTransaction
     setSplitProductLineIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
 
+  const handleProductLineChange = (id) => {
+    setProductLineId(id);
+    const product = productLines.find((p) => p.id === id);
+    const defaultAccountId =
+      entryType === 'expense' ? product?.default_expense_account_id : product?.default_revenue_account_id;
+    if (defaultAccountId) setGlAccountId(defaultAccountId);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -348,7 +356,7 @@ export default function TransactionEntry({ onPosted, prefill, editingTransaction
               )}
             </>
           ) : (
-            <select id="productLine" value={productLineId} onChange={(e) => setProductLineId(e.target.value)}>
+            <select id="productLine" value={productLineId} onChange={(e) => handleProductLineChange(e.target.value)}>
               <option value="">Unassigned / Overhead</option>
               {productLines.map((p) => (
                 <option key={p.id} value={p.id}>
