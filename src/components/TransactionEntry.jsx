@@ -20,7 +20,7 @@ export default function TransactionEntry({ onPosted, prefill, editingTransaction
   const { accounts } = useChartOfAccounts();
   const { productLines } = useProductLines();
   const { categories } = useExpenseCategories();
-  const { postTransaction, updateTransaction } = useTransactions();
+  const { postTransaction, postSplitTransaction, updateTransaction } = useTransactions();
 
   const [transactionId, setTransactionId] = useState(null);
   const [entryType, setEntryType] = useState('expense'); // 'expense' | 'income'
@@ -30,6 +30,8 @@ export default function TransactionEntry({ onPosted, prefill, editingTransaction
   const [moneyAccountId, setMoneyAccountId] = useState(''); // cash/bank/credit card side
   const [glAccountId, setGlAccountId] = useState(''); // expense or revenue side
   const [productLineId, setProductLineId] = useState('');
+  const [splitMode, setSplitMode] = useState(false);
+  const [splitProductLineIds, setSplitProductLineIds] = useState([]);
   const [expenseCategoryId, setExpenseCategoryId] = useState('');
   const [isTaxDeductible, setIsTaxDeductible] = useState(true);
   const [receiptId, setReceiptId] = useState(null);
@@ -92,9 +94,15 @@ export default function TransactionEntry({ onPosted, prefill, editingTransaction
     setMoneyAccountId('');
     setGlAccountId('');
     setProductLineId('');
+    setSplitMode(false);
+    setSplitProductLineIds([]);
     setExpenseCategoryId('');
     setIsTaxDeductible(true);
     setReceiptId(null);
+  };
+
+  const toggleSplitLine = (id) => {
+    setSplitProductLineIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
 
   const handleSubmit = async (e) => {
@@ -104,6 +112,10 @@ export default function TransactionEntry({ onPosted, prefill, editingTransaction
 
     if (!moneyAccountId || !glAccountId) {
       setError('Choose both accounts for this transaction.');
+      return;
+    }
+    if (splitMode && splitProductLineIds.length < 2) {
+      setError('Select at least two product lines to split across.');
       return;
     }
 
@@ -117,16 +129,26 @@ export default function TransactionEntry({ onPosted, prefill, editingTransaction
         amount: Number(amount),
         description,
         transactionDate,
-        productLineId: productLineId || null,
         expenseCategoryId: entryType === 'expense' ? expenseCategoryId || null : null,
         isTaxDeductible: entryType === 'expense' ? isTaxDeductible : null,
       };
 
       if (isEditing) {
-        await updateTransaction({ transactionId, ...payload });
+        await updateTransaction({ transactionId, ...payload, productLineId: productLineId || null });
         setSuccess('Transaction updated.');
+      } else if (splitMode) {
+        const productLineLabelsById = Object.fromEntries(
+          productLines.map((p) => [p.id, p.product_name])
+        );
+        const posted = await postSplitTransaction({
+          ...payload,
+          productLineIds: splitProductLineIds,
+          productLineLabelsById,
+          receiptId: receiptId || null,
+        });
+        setSuccess(`Transaction split across ${posted.length} product lines.`);
       } else {
-        await postTransaction({ ...payload, receiptId: receiptId || null });
+        await postTransaction({ ...payload, productLineId: productLineId || null, receiptId: receiptId || null });
         setSuccess('Transaction posted.');
       }
       resetForm();
@@ -243,15 +265,68 @@ export default function TransactionEntry({ onPosted, prefill, editingTransaction
         </div>
 
         <div className="form-row">
-          <label htmlFor="productLine">Product line</label>
-          <select id="productLine" value={productLineId} onChange={(e) => setProductLineId(e.target.value)}>
-            <option value="">Unassigned / Overhead</option>
-            {productLines.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.service_line} {p.department ? `› ${p.department}` : ''} › {p.product_name}
-              </option>
-            ))}
-          </select>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <label htmlFor="productLine" style={{ marginBottom: 0 }}>
+              Product line
+            </label>
+            {!isEditing && (
+              <label style={{ fontWeight: 400, fontSize: '0.85rem' }}>
+                <input
+                  type="checkbox"
+                  checked={splitMode}
+                  onChange={(e) => {
+                    setSplitMode(e.target.checked);
+                    setSplitProductLineIds([]);
+                    setProductLineId('');
+                  }}
+                  style={{ width: 'auto', marginRight: 6 }}
+                />
+                Split across multiple
+              </label>
+            )}
+          </div>
+
+          {splitMode ? (
+            <>
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 6,
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: 10,
+                }}
+              >
+                {productLines.map((p) => (
+                  <label key={p.id} style={{ fontWeight: 400, display: 'flex', alignItems: 'center' }}>
+                    <input
+                      type="checkbox"
+                      checked={splitProductLineIds.includes(p.id)}
+                      onChange={() => toggleSplitLine(p.id)}
+                      style={{ width: 'auto', marginRight: 8 }}
+                    />
+                    {p.service_line} {p.department ? `› ${p.department}` : ''} › {p.product_name}
+                  </label>
+                ))}
+              </div>
+              {splitProductLineIds.length >= 2 && Number(amount) > 0 && (
+                <p className="tooltip-hint">
+                  ${(Number(amount) / splitProductLineIds.length).toFixed(2)} each across{' '}
+                  {splitProductLineIds.length} product lines.
+                </p>
+              )}
+            </>
+          ) : (
+            <select id="productLine" value={productLineId} onChange={(e) => setProductLineId(e.target.value)}>
+              <option value="">Unassigned / Overhead</option>
+              {productLines.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.service_line} {p.department ? `› ${p.department}` : ''} › {p.product_name}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
 
         {entryType === 'expense' && (

@@ -80,6 +80,76 @@ export async function postTransaction({
 }
 
 /**
+ * Split one cost evenly across several product lines. Posts N independent
+ * GL transactions (one per product line) so every existing report --
+ * P&L, Trends, Balance Sheet -- keeps working unchanged, since they all key
+ * off a single product_line_id per transaction row.
+ *
+ * Splits cents-accurately: if the total doesn't divide evenly, the leading
+ * splits absorb one extra cent each so the sum always equals the original
+ * amount exactly (e.g. $100 / 3 -> $33.34, $33.33, $33.33).
+ */
+export async function postSplitTransaction({
+  userId,
+  debitAccountId,
+  creditAccountId,
+  amount,
+  description = '',
+  transactionDate = new Date().toISOString().slice(0, 10),
+  productLineIds,
+  productLineLabelsById = {},
+  receiptId = null,
+  expenseCategoryId = null,
+  isTaxDeductible = null,
+  status = 'posted',
+}) {
+  if (!userId) throw new Error('postSplitTransaction: userId is required');
+  if (!debitAccountId || !creditAccountId) {
+    throw new Error('postSplitTransaction: debitAccountId and creditAccountId are required');
+  }
+  if (debitAccountId === creditAccountId) {
+    throw new Error('postSplitTransaction: debit and credit accounts must differ');
+  }
+  if (!Array.isArray(productLineIds) || productLineIds.length < 2) {
+    throw new Error('postSplitTransaction: select at least two product lines to split across');
+  }
+  const numericAmount = Number(amount);
+  if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+    throw new Error('postSplitTransaction: amount must be a positive number');
+  }
+
+  await validateAccountsActive(userId, [debitAccountId, creditAccountId]);
+
+  const n = productLineIds.length;
+  const totalCents = toCents(numericAmount);
+  const baseCents = Math.floor(totalCents / n);
+  const remainder = totalCents - baseCents * n;
+
+  const rows = productLineIds.map((productLineId, i) => {
+    const cents = baseCents + (i < remainder ? 1 : 0);
+    const label = productLineLabelsById[productLineId];
+    return {
+      user_id: userId,
+      product_line_id: productLineId,
+      transaction_date: transactionDate,
+      posted_date: new Date().toISOString().slice(0, 10),
+      description: label ? `${description} (split: ${label})` : description,
+      receipt_id: receiptId,
+      debit_account_id: debitAccountId,
+      credit_account_id: creditAccountId,
+      amount: fromCents(cents),
+      expense_category_id: expenseCategoryId,
+      is_tax_deductible: isTaxDeductible,
+      status,
+    };
+  });
+
+  const { data, error } = await supabase.from('transactions').insert(rows).select();
+  if (error) throw error;
+  return data;
+}
+
+/**
  * Edit an existing GL transaction in place. Re-validates both accounts
  * (they may have changed) the same way postTransaction does.
  */

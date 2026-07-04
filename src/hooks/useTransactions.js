@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import {
   deleteTransaction as deleteTransactionEngine,
+  postSplitTransaction as postSplitTransactionEngine,
   postTransaction as postTransactionEngine,
   updateTransaction as updateTransactionEngine,
 } from '../lib/accountingEngine';
@@ -45,6 +46,15 @@ export function useTransactions({ limit = 25 } = {}) {
     [user, refetch]
   );
 
+  const postSplitTransaction = useCallback(
+    async (params) => {
+      const result = await postSplitTransactionEngine({ userId: user.id, ...params });
+      await refetch();
+      return result;
+    },
+    [user, refetch]
+  );
+
   const updateTransaction = useCallback(
     async (params) => {
       const result = await updateTransactionEngine({ userId: user.id, ...params });
@@ -62,5 +72,14 @@ export function useTransactions({ limit = 25 } = {}) {
     [user, refetch]
   );
 
-  return { transactions, loading, error, refetch, postTransaction, updateTransaction, deleteTransaction };
+  return {
+    transactions,
+    loading,
+    error,
+    refetch,
+    postTransaction,
+    postSplitTransaction,
+    updateTransaction,
+    deleteTransaction,
+  };
 }
