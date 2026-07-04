@@ -30,3 +30,6 @@ SRK.rtf
 
 # contains plaintext credentials -- never commit
 PROJECT_REFERENCE.md
+
+# real financial data files dropped in for import -- personal, never commit
+/integrate files/

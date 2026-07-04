@@ -26,6 +26,9 @@ export default function Navigation() {
       <NavLink to="/reconciliation" className={({ isActive }) => (isActive ? 'active' : '')}>
         Bank Reconciliation
       </NavLink>
+      <NavLink to="/import-kdp" className={({ isActive }) => (isActive ? 'active' : '')}>
+        Import KDP Royalties
+      </NavLink>
 
       <div className="nav-section-label">Reports</div>
       <NavLink to="/trends" className={({ isActive }) => (isActive ? 'active' : '')}>

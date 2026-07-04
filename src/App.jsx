@@ -7,6 +7,7 @@ import Transactions from './pages/Transactions';
 import Receipts from './pages/Receipts';
 import Guides from './pages/Guides';
 import Reconciliation from './pages/Reconciliation';
+import ImportKdpReport from './pages/ImportKdpReport';
 import Trends from './pages/Trends';
 import BalanceSheet from './pages/BalanceSheet';
 import CashFlow from './pages/CashFlow';
@@ -46,6 +47,7 @@ export default function App() {
                   <Route path="/receipts" element={<Receipts />} />
                   <Route path="/guides" element={<Guides />} />
                   <Route path="/reconciliation" element={<Reconciliation />} />
+                  <Route path="/import-kdp" element={<ImportKdpReport />} />
                   <Route path="/trends" element={<Trends />} />
                   <Route path="/balance-sheet" element={<BalanceSheet />} />
                   <Route path="/cash-flow" element={<CashFlow />} />
