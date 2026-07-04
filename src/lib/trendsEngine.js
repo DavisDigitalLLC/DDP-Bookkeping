@@ -189,7 +189,7 @@ function buildProductHierarchyRows({ byProduct, productLines, monthKeys, numberi
  * monthlyTotals, total, average }, so the UI can render every section as a
  * flat, indented table.
  */
-export async function generateHierarchicalTrends(userId, { startMonth, endMonth }) {
+async function fetchTrendData(userId, { startMonth, endMonth }) {
   const monthKeys = monthRangeKeys(startMonth, endMonth);
   const windowStart = `${startMonth}-01`;
   const windowEnd = `${shiftMonthKey(endMonth, 1)}-01`; // exclusive upper bound
@@ -264,6 +264,13 @@ export async function generateHierarchicalTrends(userId, { startMonth, endMonth 
       monthMap.set(mKey, monthMap.get(mKey) + cents);
     }
   }
+
+  return { monthKeys, productLines, accounts, revenueByProduct, expenseByProduct, expenseByAccountVendor };
+}
+
+export async function generateHierarchicalTrends(userId, { startMonth, endMonth }) {
+  const { monthKeys, productLines, accounts, revenueByProduct, expenseByProduct, expenseByAccountVendor } =
+    await fetchTrendData(userId, { startMonth, endMonth });
 
   // ---------------------------------------------------------------------
   // Revenue and Expenses-by-product-line: both Service Line -> Department
@@ -376,4 +383,82 @@ export async function generateHierarchicalTrends(userId, { startMonth, endMonth 
   ];
 
   return { months: monthKeys, revenueRows, expenseByProductRows, operatingRows, fixedRows, summaryRows };
+}
+
+/**
+ * Monthly Revenue / Expense / Net totals for one scope -- the whole
+ * business, one Service Line, one Department (within a Service Line), or
+ * one Product -- for the Dashboard's drill-down charts. Reuses the same
+ * transaction bucketing as generateHierarchicalTrends so the numbers always
+ * agree with Trends.
+ *
+ * scope: { type: 'overall' }
+ *      | { type: 'serviceLine', serviceLine }
+ *      | { type: 'department', serviceLine, department }
+ *      | { type: 'product', productLineId }
+ */
+export async function generateEntityMonthlyTotals(userId, { startMonth, endMonth, scope }) {
+  const { monthKeys, productLines, revenueByProduct, expenseByProduct } = await fetchTrendData(userId, {
+    startMonth,
+    endMonth,
+  });
+
+  const matchesScope = (product) => {
+    if (scope.type === 'serviceLine') return product.service_line === scope.serviceLine;
+    if (scope.type === 'department') {
+      return product.service_line === scope.serviceLine && (product.department ?? '') === (scope.department ?? '');
+    }
+    if (scope.type === 'product') return product.id === scope.productLineId;
+    return true; // 'overall'
+  };
+
+  const matchingIds = productLines.filter(matchesScope).map((p) => p.id);
+  if (scope.type === 'overall') matchingIds.push('__unassigned__');
+
+  const revenueCents = zeroMonthMap(monthKeys);
+  const expenseCents = zeroMonthMap(monthKeys);
+  for (const id of matchingIds) {
+    addInto(revenueCents, revenueByProduct.get(id) ?? zeroMonthMap(monthKeys));
+    addInto(expenseCents, expenseByProduct.get(id) ?? zeroMonthMap(monthKeys));
+  }
+
+  const netCents = zeroMonthMap(monthKeys);
+  for (const m of monthKeys) netCents.set(m, revenueCents.get(m) - expenseCents.get(m));
+
+  return {
+    months: monthKeys,
+    revenueByMonth: monthKeys.map((m) => fromCents(revenueCents.get(m))),
+    expenseByMonth: monthKeys.map((m) => fromCents(expenseCents.get(m))),
+    netByMonth: monthKeys.map((m) => fromCents(netCents.get(m))),
+  };
+}
+
+/**
+ * Distinct Service Line / Department / Product options for Dashboard
+ * drill-down dropdowns, straight from product_lines (not derived from
+ * transaction activity, so a brand-new product with no history yet still
+ * shows up as selectable).
+ */
+export async function fetchDrilldownOptions(userId) {
+  const { data, error } = await supabase
+    .from('product_lines')
+    .select('id, service_line, department, product_name')
+    .eq('user_id', userId)
+    .order('service_line')
+    .order('department')
+    .order('product_name');
+  if (error) throw error;
+
+  const serviceLines = [...new Set(data.map((p) => p.service_line))];
+  const departments = [
+    ...new Map(
+      data.filter((p) => p.department).map((p) => [`${p.service_line}|${p.department}`, { serviceLine: p.service_line, department: p.department }])
+    ).values(),
+  ];
+  const products = data.map((p) => ({
+    id: p.id,
+    label: `${p.service_line}${p.department ? ` › ${p.department}` : ''} › ${p.product_name}`,
+  }));
+
+  return { serviceLines, departments, products };
 }

@@ -10,11 +10,12 @@
     "@testing-library/user-event": "^13.5.0",
     "axios": "^1.18.1",
     "date-fns": "^4.4.0",
+    "exceljs": "^4.4.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-router-dom": "^7.18.1",
     "react-scripts": "5.0.1",
-    "recharts": "^3.9.1",
+    "recharts": "^3.9.2",
     "tesseract.js": "^7.0.0",
     "web-vitals": "^2.1.4"
   },

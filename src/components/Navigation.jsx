@@ -40,6 +40,9 @@ export default function Navigation() {
       <NavLink to="/tax-export" className={({ isActive }) => (isActive ? 'active' : '')}>
         Tax Export
       </NavLink>
+      <NavLink to="/custom-report" className={({ isActive }) => (isActive ? 'active' : '')}>
+        Custom Report
+      </NavLink>
 
       <div className="nav-section-label">Manage</div>
       <NavLink to="/manage/products" className={({ isActive }) => (isActive ? 'active' : '')}>
@@ -50,6 +53,9 @@ export default function Navigation() {
       </NavLink>
       <NavLink to="/manage/accounts" className={({ isActive }) => (isActive ? 'active' : '')}>
         Chart of Accounts
+      </NavLink>
+      <NavLink to="/manage/close" className={({ isActive }) => (isActive ? 'active' : '')}>
+        Month-End Close
       </NavLink>
 
       <NavLink to="/settings" className={({ isActive }) => (isActive ? 'active' : '')}>

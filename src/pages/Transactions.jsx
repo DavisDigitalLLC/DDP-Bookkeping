@@ -1,10 +1,12 @@
 import { useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import TransactionEntry from '../components/TransactionEntry';
+import { useClosedPeriods } from '../hooks/useClosedPeriods';
 import { useTransactions } from '../hooks/useTransactions';
 
 export default function Transactions() {
   const { transactions, refetch, deleteTransaction } = useTransactions({ limit: 50 });
+  const { isMonthClosed } = useClosedPeriods();
   const location = useLocation();
   const [editingTransaction, setEditingTransaction] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
@@ -66,10 +68,19 @@ export default function Transactions() {
             </thead>
             <tbody>
               {transactions.map((t) => {
-                const locked = t.status === 'reconciled';
+                const periodClosed = isMonthClosed(t.transaction_date.slice(0, 7));
+                const locked = t.status === 'reconciled' || periodClosed;
+                const lockReason = periodClosed
+                  ? 'This month is closed -- reopen it in Manage > Month-End Close to edit'
+                  : t.status === 'reconciled'
+                    ? 'Unreconcile in Bank Reconciliation before editing'
+                    : '';
                 return (
                   <tr key={t.id}>
-                    <td>{t.transaction_date}</td>
+                    <td>
+                      {t.transaction_date}
+                      {periodClosed && ' 🔒'}
+                    </td>
                     <td>{t.description}</td>
                     <td>{t.debit_account?.account_name}</td>
                     <td>{t.credit_account?.account_name}</td>
@@ -82,7 +93,7 @@ export default function Transactions() {
                         className="secondary"
                         onClick={() => handleEdit(t)}
                         disabled={locked}
-                        title={locked ? 'Unreconcile in Bank Reconciliation before editing' : ''}
+                        title={lockReason}
                         style={{ marginRight: 6 }}
                       >
                         Edit
@@ -92,7 +103,7 @@ export default function Transactions() {
                         className="secondary"
                         onClick={() => handleDelete(t)}
                         disabled={locked || deletingId === t.id}
-                        title={locked ? 'Unreconcile in Bank Reconciliation before deleting' : ''}
+                        title={lockReason}
                       >
                         {deletingId === t.id ? 'Deleting…' : 'Delete'}
                       </button>

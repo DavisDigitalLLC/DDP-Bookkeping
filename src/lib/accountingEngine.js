@@ -8,6 +8,28 @@ const fromCents = (cents) => Math.round(cents) / 100;
 const SE_TAX_RATE = 0.153; // 15.3%
 const SE_TAX_NET_EARNINGS_FACTOR = 0.9235; // 92.35%
 
+/**
+ * Throws if `dateStr` falls inside a month the user has closed out (see
+ * period_closes table / useClosedPeriods hook). A closed period is a soft
+ * lock -- reopening it is always possible for a correcting entry, this
+ * just stops it from happening by accident through the normal entry flow.
+ */
+async function assertPeriodOpen(userId, dateStr) {
+  const periodMonth = `${dateStr.slice(0, 7)}-01`;
+  const { data, error } = await supabase
+    .from('period_closes')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('period_month', periodMonth)
+    .maybeSingle();
+  if (error) throw error;
+  if (data) {
+    throw new Error(
+      `${dateStr.slice(0, 7)} is closed for editing. Reopen the period first if you need to make a correction.`
+    );
+  }
+}
+
 async function validateAccountsActive(userId, accountIds) {
   const { data: accounts, error } = await supabase
     .from('chart_of_accounts')
@@ -55,6 +77,7 @@ export async function postTransaction({
   }
 
   await validateAccountsActive(userId, [debitAccountId, creditAccountId]);
+  await assertPeriodOpen(userId, transactionDate);
 
   const { data, error } = await supabase
     .from('transactions')
@@ -122,6 +145,7 @@ export async function postSplitTransaction({
   }
 
   await validateAccountsActive(userId, [debitAccountId, creditAccountId]);
+  await assertPeriodOpen(userId, transactionDate);
 
   const n = productLineIds.length;
   const totalCents = toCents(numericAmount);
@@ -191,6 +215,7 @@ export async function postItemizedTransaction({
 
   const accountIds = [...new Set([moneyAccountId, ...lineItems.map((l) => l.accountId)])];
   await validateAccountsActive(userId, accountIds);
+  await assertPeriodOpen(userId, transactionDate);
 
   const rows = lineItems.map((line) => {
     const debitAccountId = entryType === 'expense' ? line.accountId : moneyAccountId;
@@ -249,6 +274,16 @@ export async function updateTransaction({
 
   await validateAccountsActive(userId, [debitAccountId, creditAccountId]);
 
+  const { data: existing, error: fetchError } = await supabase
+    .from('transactions')
+    .select('transaction_date')
+    .eq('id', transactionId)
+    .eq('user_id', userId)
+    .single();
+  if (fetchError) throw fetchError;
+  await assertPeriodOpen(userId, existing.transaction_date);
+  await assertPeriodOpen(userId, transactionDate);
+
   const { data, error } = await supabase
     .from('transactions')
     .update({
@@ -274,6 +309,15 @@ export async function updateTransaction({
 export async function deleteTransaction({ userId, transactionId }) {
   if (!userId) throw new Error('deleteTransaction: userId is required');
   if (!transactionId) throw new Error('deleteTransaction: transactionId is required');
+
+  const { data: existing, error: fetchError } = await supabase
+    .from('transactions')
+    .select('transaction_date')
+    .eq('id', transactionId)
+    .eq('user_id', userId)
+    .single();
+  if (fetchError) throw fetchError;
+  await assertPeriodOpen(userId, existing.transaction_date);
 
   const { error } = await supabase.from('transactions').delete().eq('id', transactionId).eq('user_id', userId);
   if (error) throw error;

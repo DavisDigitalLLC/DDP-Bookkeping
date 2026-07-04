@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
+import { useDrilldownOptions } from '../hooks/useDrilldownOptions';
 import { generateProfitAndLoss } from '../lib/accountingEngine';
 import { useTransactions } from '../hooks/useTransactions';
+import EntityTrendChart from '../components/EntityTrendChart';
 
 function monthBounds(date = new Date()) {
   const start = new Date(date.getFullYear(), date.getMonth(), 1);
@@ -17,9 +19,14 @@ function yearBounds(date = new Date()) {
 export default function Dashboard() {
   const { user } = useAuth();
   const { transactions } = useTransactions({ limit: 10 });
+  const { serviceLines, departments, products, loading: optionsLoading } = useDrilldownOptions();
   const [monthPL, setMonthPL] = useState(null);
   const [yearPL, setYearPL] = useState(null);
   const [error, setError] = useState('');
+
+  const [selectedServiceLine, setSelectedServiceLine] = useState('');
+  const [selectedDepartmentKey, setSelectedDepartmentKey] = useState('');
+  const [selectedProductId, setSelectedProductId] = useState('');
 
   useEffect(() => {
     if (!user) return;
@@ -38,6 +45,24 @@ export default function Dashboard() {
       }
     })();
   }, [user]);
+
+  useEffect(() => {
+    if (!optionsLoading && serviceLines.length && !selectedServiceLine) setSelectedServiceLine(serviceLines[0]);
+  }, [optionsLoading, serviceLines, selectedServiceLine]);
+  useEffect(() => {
+    if (!optionsLoading && departments.length && !selectedDepartmentKey) {
+      setSelectedDepartmentKey(`${departments[0].serviceLine}|${departments[0].department}`);
+    }
+  }, [optionsLoading, departments, selectedDepartmentKey]);
+  useEffect(() => {
+    if (!optionsLoading && products.length && !selectedProductId) setSelectedProductId(products[0].id);
+  }, [optionsLoading, products, selectedProductId]);
+
+  const departmentScope = useMemo(() => {
+    if (!selectedDepartmentKey) return null;
+    const [serviceLine, department] = selectedDepartmentKey.split('|');
+    return { type: 'department', serviceLine, department };
+  }, [selectedDepartmentKey]);
 
   return (
     <div>
@@ -69,6 +94,65 @@ export default function Dashboard() {
           <div className="metric-label">Net taxable income (YTD)</div>
           <div className="metric-value">${(yearPL?.totals.netTaxableIncome ?? 0).toFixed(2)}</div>
         </div>
+      </div>
+
+      <div className="card">
+        <h3>Davis Digital &amp; Publishing -- overall (last 12 months)</h3>
+        <EntityTrendChart scope={{ type: 'overall' }} />
+      </div>
+
+      <div className="card">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+          <h3 style={{ margin: 0 }}>By Service Line</h3>
+          <select value={selectedServiceLine} onChange={(e) => setSelectedServiceLine(e.target.value)} style={{ maxWidth: 260 }}>
+            {serviceLines.map((sl) => (
+              <option key={sl} value={sl}>
+                {sl}
+              </option>
+            ))}
+          </select>
+        </div>
+        {selectedServiceLine ? (
+          <EntityTrendChart scope={{ type: 'serviceLine', serviceLine: selectedServiceLine }} />
+        ) : (
+          <p className="tooltip-hint">Add a product line under Manage → Products to see this chart.</p>
+        )}
+      </div>
+
+      <div className="card">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+          <h3 style={{ margin: 0 }}>By Department</h3>
+          <select value={selectedDepartmentKey} onChange={(e) => setSelectedDepartmentKey(e.target.value)} style={{ maxWidth: 260 }}>
+            {departments.map((d) => (
+              <option key={`${d.serviceLine}|${d.department}`} value={`${d.serviceLine}|${d.department}`}>
+                {d.serviceLine} › {d.department}
+              </option>
+            ))}
+          </select>
+        </div>
+        {departmentScope ? (
+          <EntityTrendChart scope={departmentScope} />
+        ) : (
+          <p className="tooltip-hint">No product lines have a department set yet.</p>
+        )}
+      </div>
+
+      <div className="card">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+          <h3 style={{ margin: 0 }}>By Product</h3>
+          <select value={selectedProductId} onChange={(e) => setSelectedProductId(e.target.value)} style={{ maxWidth: 260 }}>
+            {products.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        {selectedProductId ? (
+          <EntityTrendChart scope={{ type: 'product', productLineId: selectedProductId }} />
+        ) : (
+          <p className="tooltip-hint">Add a product line under Manage → Products to see this chart.</p>
+        )}
       </div>
 
       <div className="card">

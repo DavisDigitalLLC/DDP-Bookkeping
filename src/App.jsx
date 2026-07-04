@@ -11,9 +11,11 @@ import Trends from './pages/Trends';
 import BalanceSheet from './pages/BalanceSheet';
 import CashFlow from './pages/CashFlow';
 import TaxExport from './pages/TaxExport';
+import CustomReport from './pages/CustomReport';
 import ManageProducts from './pages/ManageProducts';
 import ManageVendors from './pages/ManageVendors';
 import ManageAccounts from './pages/ManageAccounts';
+import ManageClose from './pages/ManageClose';
 import Settings from './pages/Settings';
 
 function RequireAuth({ children }) {
@@ -48,9 +50,11 @@ export default function App() {
                   <Route path="/balance-sheet" element={<BalanceSheet />} />
                   <Route path="/cash-flow" element={<CashFlow />} />
                   <Route path="/tax-export" element={<TaxExport />} />
+                  <Route path="/custom-report" element={<CustomReport />} />
                   <Route path="/manage/products" element={<ManageProducts />} />
                   <Route path="/manage/vendors" element={<ManageVendors />} />
                   <Route path="/manage/accounts" element={<ManageAccounts />} />
+                  <Route path="/manage/close" element={<ManageClose />} />
                   <Route path="/settings" element={<Settings />} />
                 </Routes>
               </main>
