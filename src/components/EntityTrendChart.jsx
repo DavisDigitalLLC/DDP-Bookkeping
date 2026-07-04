@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Bar, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, CartesianGrid, ComposedChart, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useAuth } from '../hooks/useAuth';
 import { currentMonthKey, generateEntityMonthlyTotals, shiftMonthKey } from '../lib/trendsEngine';
 
@@ -55,7 +55,7 @@ export default function EntityTrendChart({ scope, monthsBack = 12, emptyHint }) 
         <Legend />
         <Bar dataKey="Revenue" fill="#2f6f4f" />
         <Bar dataKey="Expenses" fill="#c96a4a" />
-        <Line type="monotone" dataKey="Net Income" stroke="#1f2937" strokeWidth={2} dot={false} />
+        <Bar dataKey="Net Income" fill="#1f2937" />
       </ComposedChart>
     </ResponsiveContainer>
   );
