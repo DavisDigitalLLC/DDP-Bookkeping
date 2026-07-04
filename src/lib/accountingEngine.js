@@ -8,6 +8,21 @@ const fromCents = (cents) => Math.round(cents) / 100;
 const SE_TAX_RATE = 0.153; // 15.3%
 const SE_TAX_NET_EARNINGS_FACTOR = 0.9235; // 92.35%
 
+async function validateAccountsActive(userId, accountIds) {
+  const { data: accounts, error } = await supabase
+    .from('chart_of_accounts')
+    .select('id, is_active')
+    .eq('user_id', userId)
+    .in('id', accountIds);
+  if (error) throw error;
+  if (!accounts || accounts.length !== accountIds.length) {
+    throw new Error('One or both accounts were not found');
+  }
+  if (accounts.some((a) => !a.is_active)) {
+    throw new Error('Cannot post to an inactive account');
+  }
+}
+
 /**
  * Post a double-entry GL transaction. Debits and credits are always equal
  * because there is a single `amount` shared by both accounts.
@@ -38,19 +53,7 @@ export async function postTransaction({
     throw new Error('postTransaction: amount must be a positive number');
   }
 
-  const { data: accounts, error: acctError } = await supabase
-    .from('chart_of_accounts')
-    .select('id, is_active')
-    .eq('user_id', userId)
-    .in('id', [debitAccountId, creditAccountId]);
-
-  if (acctError) throw acctError;
-  if (!accounts || accounts.length !== 2) {
-    throw new Error('postTransaction: one or both accounts were not found');
-  }
-  if (accounts.some((a) => !a.is_active)) {
-    throw new Error('postTransaction: cannot post to an inactive account');
-  }
+  await validateAccountsActive(userId, [debitAccountId, creditAccountId]);
 
   const { data, error } = await supabase
     .from('transactions')
@@ -74,6 +77,66 @@ export async function postTransaction({
 
   if (error) throw error;
   return data;
+}
+
+/**
+ * Edit an existing GL transaction in place. Re-validates both accounts
+ * (they may have changed) the same way postTransaction does.
+ */
+export async function updateTransaction({
+  userId,
+  transactionId,
+  debitAccountId,
+  creditAccountId,
+  amount,
+  description = '',
+  transactionDate,
+  productLineId = null,
+  expenseCategoryId = null,
+  isTaxDeductible = null,
+}) {
+  if (!userId) throw new Error('updateTransaction: userId is required');
+  if (!transactionId) throw new Error('updateTransaction: transactionId is required');
+  if (!debitAccountId || !creditAccountId) {
+    throw new Error('updateTransaction: debitAccountId and creditAccountId are required');
+  }
+  if (debitAccountId === creditAccountId) {
+    throw new Error('updateTransaction: debit and credit accounts must differ');
+  }
+  const numericAmount = Number(amount);
+  if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+    throw new Error('updateTransaction: amount must be a positive number');
+  }
+
+  await validateAccountsActive(userId, [debitAccountId, creditAccountId]);
+
+  const { data, error } = await supabase
+    .from('transactions')
+    .update({
+      product_line_id: productLineId,
+      transaction_date: transactionDate,
+      description,
+      debit_account_id: debitAccountId,
+      credit_account_id: creditAccountId,
+      amount: fromCents(toCents(numericAmount)),
+      expense_category_id: expenseCategoryId,
+      is_tax_deductible: isTaxDeductible,
+    })
+    .eq('id', transactionId)
+    .eq('user_id', userId)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteTransaction({ userId, transactionId }) {
+  if (!userId) throw new Error('deleteTransaction: userId is required');
+  if (!transactionId) throw new Error('deleteTransaction: transactionId is required');
+
+  const { error } = await supabase.from('transactions').delete().eq('id', transactionId).eq('user_id', userId);
+  if (error) throw error;
 }
 
 /**

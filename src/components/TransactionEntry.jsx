@@ -16,12 +16,13 @@ const DEDUCTION_TOOLTIPS = {
   personal_expenses: 'Not deductible. Use this to keep personal spending out of your P&L, on purpose.',
 };
 
-export default function TransactionEntry({ onPosted, prefill }) {
+export default function TransactionEntry({ onPosted, prefill, editingTransaction, onCancelEdit }) {
   const { accounts } = useChartOfAccounts();
   const { productLines } = useProductLines();
   const { categories } = useExpenseCategories();
-  const { postTransaction } = useTransactions();
+  const { postTransaction, updateTransaction } = useTransactions();
 
+  const [transactionId, setTransactionId] = useState(null);
   const [entryType, setEntryType] = useState('expense'); // 'expense' | 'income'
   const [amount, setAmount] = useState('');
   const [transactionDate, setTransactionDate] = useState(new Date().toISOString().slice(0, 10));
@@ -36,6 +37,8 @@ export default function TransactionEntry({ onPosted, prefill }) {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
+  const isEditing = Boolean(transactionId);
+
   useEffect(() => {
     if (!prefill) return;
     if (prefill.amount != null) setAmount(String(prefill.amount));
@@ -43,6 +46,27 @@ export default function TransactionEntry({ onPosted, prefill }) {
     if (prefill.transactionDate) setTransactionDate(prefill.transactionDate);
     if (prefill.receiptId) setReceiptId(prefill.receiptId);
   }, [prefill]);
+
+  useEffect(() => {
+    if (!editingTransaction) return;
+    const t = editingTransaction;
+    const debitIsExpense = t.debit_account?.account_type === 'expense';
+    const type = debitIsExpense ? 'expense' : 'income';
+
+    setTransactionId(t.id);
+    setEntryType(type);
+    setAmount(String(t.amount));
+    setTransactionDate(t.transaction_date);
+    setDescription(t.description ?? '');
+    setMoneyAccountId(type === 'expense' ? t.credit_account_id : t.debit_account_id);
+    setGlAccountId(type === 'expense' ? t.debit_account_id : t.credit_account_id);
+    setProductLineId(t.product_line_id ?? '');
+    setExpenseCategoryId(t.expense_category_id ?? '');
+    setIsTaxDeductible(t.is_tax_deductible ?? true);
+    setReceiptId(t.receipt_id ?? null);
+    setError('');
+    setSuccess('');
+  }, [editingTransaction]);
 
   const moneyAccounts = useMemo(
     () => accounts.filter((a) => a.account_type === 'asset' || a.account_type === 'liability'),
@@ -62,8 +86,10 @@ export default function TransactionEntry({ onPosted, prefill }) {
   };
 
   const resetForm = () => {
+    setTransactionId(null);
     setAmount('');
     setDescription('');
+    setMoneyAccountId('');
     setGlAccountId('');
     setProductLineId('');
     setExpenseCategoryId('');
@@ -85,8 +111,7 @@ export default function TransactionEntry({ onPosted, prefill }) {
     try {
       const debitAccountId = entryType === 'expense' ? glAccountId : moneyAccountId;
       const creditAccountId = entryType === 'expense' ? moneyAccountId : glAccountId;
-
-      await postTransaction({
+      const payload = {
         debitAccountId,
         creditAccountId,
         amount: Number(amount),
@@ -95,10 +120,15 @@ export default function TransactionEntry({ onPosted, prefill }) {
         productLineId: productLineId || null,
         expenseCategoryId: entryType === 'expense' ? expenseCategoryId || null : null,
         isTaxDeductible: entryType === 'expense' ? isTaxDeductible : null,
-        receiptId: receiptId || null,
-      });
+      };
 
-      setSuccess('Transaction posted.');
+      if (isEditing) {
+        await updateTransaction({ transactionId, ...payload });
+        setSuccess('Transaction updated.');
+      } else {
+        await postTransaction({ ...payload, receiptId: receiptId || null });
+        setSuccess('Transaction posted.');
+      }
       resetForm();
       onPosted?.();
     } catch (err) {
@@ -108,9 +138,16 @@ export default function TransactionEntry({ onPosted, prefill }) {
     }
   };
 
+  const handleCancelEdit = () => {
+    resetForm();
+    setError('');
+    setSuccess('');
+    onCancelEdit?.();
+  };
+
   return (
     <div className="card">
-      <h3>New {entryType === 'expense' ? 'Expense' : 'Income'}</h3>
+      <h3>{isEditing ? 'Edit' : 'New'} {entryType === 'expense' ? 'Expense' : 'Income'}</h3>
       {receiptId && <p className="tooltip-hint">Attached to scanned receipt.</p>}
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
         <button
@@ -261,9 +298,16 @@ export default function TransactionEntry({ onPosted, prefill }) {
         {error && <p className="error-text">{error}</p>}
         {success && <p className="tooltip-hint">{success}</p>}
 
-        <button type="submit" disabled={submitting}>
-          {submitting ? 'Posting…' : 'Post transaction'}
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button type="submit" disabled={submitting}>
+            {submitting ? 'Saving…' : isEditing ? 'Update transaction' : 'Post transaction'}
+          </button>
+          {isEditing && (
+            <button type="button" className="secondary" onClick={handleCancelEdit} disabled={submitting}>
+              Cancel edit
+            </button>
+          )}
+        </div>
       </form>
     </div>
   );

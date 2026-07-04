@@ -25,3 +25,5 @@ SRK.rtf
 
 # local Claude Code permission overrides -- personal, not team-shared
 .claude/settings.local.json
+.vercel
+.env*

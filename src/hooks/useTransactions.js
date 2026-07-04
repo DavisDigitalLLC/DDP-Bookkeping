@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import { postTransaction as postTransactionEngine } from '../lib/accountingEngine';
+import {
+  deleteTransaction as deleteTransactionEngine,
+  postTransaction as postTransactionEngine,
+  updateTransaction as updateTransactionEngine,
+} from '../lib/accountingEngine';
 import { useAuth } from './useAuth';
 
 export function useTransactions({ limit = 25 } = {}) {
@@ -16,8 +20,8 @@ export function useTransactions({ limit = 25 } = {}) {
       .from('transactions')
       .select(
         `*,
-         debit_account:chart_of_accounts!transactions_debit_account_id_fkey(account_name),
-         credit_account:chart_of_accounts!transactions_credit_account_id_fkey(account_name),
+         debit_account:chart_of_accounts!transactions_debit_account_id_fkey(account_name, account_type),
+         credit_account:chart_of_accounts!transactions_credit_account_id_fkey(account_name, account_type),
          product_line:product_lines(product_name)`
       )
       .eq('user_id', user.id)
@@ -41,5 +45,22 @@ export function useTransactions({ limit = 25 } = {}) {
     [user, refetch]
   );
 
-  return { transactions, loading, error, refetch, postTransaction };
+  const updateTransaction = useCallback(
+    async (params) => {
+      const result = await updateTransactionEngine({ userId: user.id, ...params });
+      await refetch();
+      return result;
+    },
+    [user, refetch]
+  );
+
+  const deleteTransaction = useCallback(
+    async (transactionId) => {
+      await deleteTransactionEngine({ userId: user.id, transactionId });
+      await refetch();
+    },
+    [user, refetch]
+  );
+
+  return { transactions, loading, error, refetch, postTransaction, updateTransaction, deleteTransaction };
 }
