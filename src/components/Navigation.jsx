@@ -26,9 +26,21 @@ export default function Navigation() {
       <NavLink to="/reconciliation" className={({ isActive }) => (isActive ? 'active' : '')}>
         Bank Reconciliation
       </NavLink>
+
+      <div className="nav-section-label">Reports</div>
       <NavLink to="/trends" className={({ isActive }) => (isActive ? 'active' : '')}>
         Trends
       </NavLink>
+      <NavLink to="/balance-sheet" className={({ isActive }) => (isActive ? 'active' : '')}>
+        Balance Sheet
+      </NavLink>
+      <NavLink to="/cash-flow" className={({ isActive }) => (isActive ? 'active' : '')}>
+        Cash Flow
+      </NavLink>
+      <NavLink to="/tax-export" className={({ isActive }) => (isActive ? 'active' : '')}>
+        Tax Export
+      </NavLink>
+
       <NavLink to="/settings" className={({ isActive }) => (isActive ? 'active' : '')}>
         Settings & Chart of Accounts
       </NavLink>

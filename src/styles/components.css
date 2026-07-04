@@ -97,6 +97,15 @@ h1, h2, h3, h4, .nav-brand, .metric-value {
   font-size: 0.95rem;
 }
 
+.nav-section-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(255, 255, 255, 0.5);
+  padding: 12px 10px 2px;
+}
+
 .nav a.active,
 .nav a:hover {
   background: rgba(255, 255, 255, 0.12);

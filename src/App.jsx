@@ -8,6 +8,9 @@ import Receipts from './pages/Receipts';
 import Guides from './pages/Guides';
 import Reconciliation from './pages/Reconciliation';
 import Trends from './pages/Trends';
+import BalanceSheet from './pages/BalanceSheet';
+import CashFlow from './pages/CashFlow';
+import TaxExport from './pages/TaxExport';
 import Settings from './pages/Settings';
 
 function RequireAuth({ children }) {
@@ -39,6 +42,9 @@ export default function App() {
                   <Route path="/guides" element={<Guides />} />
                   <Route path="/reconciliation" element={<Reconciliation />} />
                   <Route path="/trends" element={<Trends />} />
+                  <Route path="/balance-sheet" element={<BalanceSheet />} />
+                  <Route path="/cash-flow" element={<CashFlow />} />
+                  <Route path="/tax-export" element={<TaxExport />} />
                   <Route path="/settings" element={<Settings />} />
                 </Routes>
               </main>

@@ -307,3 +307,108 @@ export async function generateBalanceSheet(userId, asOfDate = new Date().toISOSt
     },
   };
 }
+
+function dayBefore(dateStr) {
+  const d = new Date(`${dateStr}T00:00:00`);
+  d.setDate(d.getDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Cash-basis cash flow statement for [periodStart, periodEnd] (inclusive).
+ * "Cash" is whichever GL accounts are linked from bank_accounts.gl_account_id
+ * (falls back to account 1000 "Cash in Bank" if no bank accounts are linked
+ * yet). Every transaction touching a cash account is classified by the
+ * *other* account it touches:
+ *   - revenue/expense counterpart -> Operating activities
+ *   - asset counterpart           -> Investing activities
+ *   - liability/equity counterpart -> Financing activities
+ * Transfers between two cash accounts net to zero (no external cash effect).
+ */
+export async function generateCashFlow(userId, periodStart, periodEnd) {
+  const [{ data: bankAccounts, error: bankError }, { data: accounts, error: acctError }] = await Promise.all([
+    supabase.from('bank_accounts').select('gl_account_id').eq('user_id', userId).eq('is_active', true),
+    supabase
+      .from('chart_of_accounts')
+      .select('id, account_number, account_name, account_type')
+      .eq('user_id', userId)
+      .eq('is_active', true),
+  ]);
+  if (bankError) throw bankError;
+  if (acctError) throw acctError;
+
+  const accountsById = new Map(accounts.map((a) => [a.id, a]));
+  let cashAccountIds = [...new Set(bankAccounts.map((b) => b.gl_account_id).filter(Boolean))];
+  if (cashAccountIds.length === 0) {
+    const fallback = accounts.find((a) => a.account_number === '1000');
+    if (fallback) cashAccountIds = [fallback.id];
+  }
+  const cashAccountIdSet = new Set(cashAccountIds);
+
+  const [beginningResults, endingResults] = await Promise.all([
+    Promise.all(cashAccountIds.map((id) => getAccountBalance(id, dayBefore(periodStart)))),
+    Promise.all(cashAccountIds.map((id) => getAccountBalance(id, periodEnd))),
+  ]);
+  const beginningCash = beginningResults.reduce((s, v) => s + v, 0);
+  const endingCash = endingResults.reduce((s, v) => s + v, 0);
+
+  const { data: transactions, error: txError } = await supabase
+    .from('transactions')
+    .select('amount, transaction_date, debit_account_id, credit_account_id')
+    .eq('user_id', userId)
+    .gte('transaction_date', periodStart)
+    .lte('transaction_date', periodEnd)
+    .in('status', ['posted', 'reconciled']);
+  if (txError) throw txError;
+
+  const CATEGORY_BY_TYPE = { revenue: 'operating', expense: 'operating', asset: 'investing', liability: 'financing', equity: 'financing' };
+  const buckets = {
+    operating: new Map(),
+    investing: new Map(),
+    financing: new Map(),
+  };
+
+  for (const tx of transactions) {
+    const cents = toCents(tx.amount);
+    const debitIsCash = cashAccountIdSet.has(tx.debit_account_id);
+    const creditIsCash = cashAccountIdSet.has(tx.credit_account_id);
+    if (debitIsCash === creditIsCash) continue; // both cash (transfer) or neither -- no external effect
+
+    const counterpartyId = debitIsCash ? tx.credit_account_id : tx.debit_account_id;
+    const counterparty = accountsById.get(counterpartyId);
+    if (!counterparty) continue;
+
+    const category = CATEGORY_BY_TYPE[counterparty.account_type];
+    if (!category) continue;
+
+    const signedCents = debitIsCash ? cents : -cents; // cash in vs. cash out
+    const bucket = buckets[category];
+    bucket.set(counterpartyId, (bucket.get(counterpartyId) ?? 0) + signedCents);
+  }
+
+  const buildLineItems = (bucket) =>
+    Array.from(bucket.entries())
+      .map(([accountId, cents]) => ({
+        accountName: accountsById.get(accountId)?.account_name ?? 'Unknown account',
+        amount: fromCents(cents),
+      }))
+      .filter((item) => item.amount !== 0)
+      .sort((a, b) => b.amount - a.amount);
+
+  const totalFor = (bucket) => fromCents(Array.from(bucket.values()).reduce((s, v) => s + v, 0));
+
+  const operating = { lineItems: buildLineItems(buckets.operating), total: totalFor(buckets.operating) };
+  const investing = { lineItems: buildLineItems(buckets.investing), total: totalFor(buckets.investing) };
+  const financing = { lineItems: buildLineItems(buckets.financing), total: totalFor(buckets.financing) };
+
+  return {
+    periodStart,
+    periodEnd,
+    beginningCash: fromCents(toCents(beginningCash)),
+    endingCash: fromCents(toCents(endingCash)),
+    netChange: fromCents(toCents(endingCash) - toCents(beginningCash)),
+    operating,
+    investing,
+    financing,
+  };
+}
