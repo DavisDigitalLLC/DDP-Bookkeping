@@ -154,6 +154,70 @@ export async function postSplitTransaction({
 }
 
 /**
+ * Post one payment as several independent GL transactions, each with its
+ * own account, amount, product line, and category -- for a single invoice
+ * that covers genuinely different expense (or revenue) categories, e.g. an
+ * LLC formation invoice covering both filing fees and a domain purchase.
+ * Unlike postSplitTransaction (one account, evenly divided across product
+ * lines), each line item here is independent and the amounts don't have
+ * to be equal or even sum to a predetermined total -- the total *is* the
+ * sum of the lines.
+ */
+export async function postItemizedTransaction({
+  userId,
+  moneyAccountId,
+  entryType, // 'expense' | 'income' -- which side of each line the money account sits on
+  transactionDate = new Date().toISOString().slice(0, 10),
+  description = '',
+  vendorId = null,
+  receiptId = null,
+  lineItems, // [{ amount, accountId, productLineId, expenseCategoryId, isTaxDeductible }]
+  status = 'posted',
+}) {
+  if (!userId) throw new Error('postItemizedTransaction: userId is required');
+  if (!moneyAccountId) throw new Error('postItemizedTransaction: moneyAccountId is required');
+  if (!Array.isArray(lineItems) || lineItems.length < 2) {
+    throw new Error('postItemizedTransaction: at least two line items are required');
+  }
+  for (const line of lineItems) {
+    const numericAmount = Number(line.amount);
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+      throw new Error('postItemizedTransaction: every line item needs a positive amount');
+    }
+    if (!line.accountId) {
+      throw new Error('postItemizedTransaction: every line item needs an account');
+    }
+  }
+
+  const accountIds = [...new Set([moneyAccountId, ...lineItems.map((l) => l.accountId)])];
+  await validateAccountsActive(userId, accountIds);
+
+  const rows = lineItems.map((line) => {
+    const debitAccountId = entryType === 'expense' ? line.accountId : moneyAccountId;
+    const creditAccountId = entryType === 'expense' ? moneyAccountId : line.accountId;
+    return {
+      user_id: userId,
+      product_line_id: line.productLineId || null,
+      transaction_date: transactionDate,
+      posted_date: new Date().toISOString().slice(0, 10),
+      description,
+      receipt_id: receiptId,
+      debit_account_id: debitAccountId,
+      credit_account_id: creditAccountId,
+      amount: fromCents(toCents(Number(line.amount))),
+      expense_category_id: entryType === 'expense' ? line.expenseCategoryId || null : null,
+      is_tax_deductible: entryType === 'expense' ? (line.isTaxDeductible ?? null) : null,
+      vendor_id: vendorId,
+      status,
+    };
+  });
+
+  const { data, error } = await supabase.from('transactions').insert(rows).select();
+  if (error) throw error;
+  return data;
+}
+
+/**
  * Edit an existing GL transaction in place. Re-validates both accounts
  * (they may have changed) the same way postTransaction does.
  */
