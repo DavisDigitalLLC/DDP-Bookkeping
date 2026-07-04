@@ -23,7 +23,8 @@ export function useTransactions({ limit = 25 } = {}) {
         `*,
          debit_account:chart_of_accounts!transactions_debit_account_id_fkey(account_name, account_type),
          credit_account:chart_of_accounts!transactions_credit_account_id_fkey(account_name, account_type),
-         product_line:product_lines(product_name)`
+         product_line:product_lines(product_name),
+         vendor:vendors(vendor_name)`
       )
       .eq('user_id', user.id)
       .order('transaction_date', { ascending: false })

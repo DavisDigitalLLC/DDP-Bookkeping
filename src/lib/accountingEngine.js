@@ -39,6 +39,7 @@ export async function postTransaction({
   receiptId = null,
   expenseCategoryId = null,
   isTaxDeductible = null,
+  vendorId = null,
   status = 'posted',
 }) {
   if (!userId) throw new Error('postTransaction: userId is required');
@@ -70,6 +71,7 @@ export async function postTransaction({
       amount: fromCents(toCents(numericAmount)),
       expense_category_id: expenseCategoryId,
       is_tax_deductible: isTaxDeductible,
+      vendor_id: vendorId,
       status,
     })
     .select()
@@ -101,6 +103,7 @@ export async function postSplitTransaction({
   receiptId = null,
   expenseCategoryId = null,
   isTaxDeductible = null,
+  vendorId = null,
   status = 'posted',
 }) {
   if (!userId) throw new Error('postSplitTransaction: userId is required');
@@ -140,6 +143,7 @@ export async function postSplitTransaction({
       amount: fromCents(cents),
       expense_category_id: expenseCategoryId,
       is_tax_deductible: isTaxDeductible,
+      vendor_id: vendorId,
       status,
     };
   });
@@ -164,6 +168,7 @@ export async function updateTransaction({
   productLineId = null,
   expenseCategoryId = null,
   isTaxDeductible = null,
+  vendorId = null,
 }) {
   if (!userId) throw new Error('updateTransaction: userId is required');
   if (!transactionId) throw new Error('updateTransaction: transactionId is required');
@@ -191,6 +196,7 @@ export async function updateTransaction({
       amount: fromCents(toCents(numericAmount)),
       expense_category_id: expenseCategoryId,
       is_tax_deductible: isTaxDeductible,
+      vendor_id: vendorId,
     })
     .eq('id', transactionId)
     .eq('user_id', userId)

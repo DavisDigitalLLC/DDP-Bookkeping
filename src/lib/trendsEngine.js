@@ -125,7 +125,9 @@ export async function generateHierarchicalTrends(userId, { startMonth, endMonth 
         .order('account_number'),
       supabase
         .from('transactions')
-        .select('amount, transaction_date, description, debit_account_id, credit_account_id, product_line_id')
+        .select(
+          'amount, transaction_date, description, debit_account_id, credit_account_id, product_line_id, vendor_id, vendor:vendors(vendor_name)'
+        )
         .eq('user_id', userId)
         .gte('transaction_date', windowStart)
         .lt('transaction_date', windowEnd)
@@ -163,7 +165,9 @@ export async function generateHierarchicalTrends(userId, { startMonth, endMonth 
     const debitAccount = accountsById.get(tx.debit_account_id);
     if (debitAccount?.account_type === 'expense') {
       const vendorMap = getBucket(expenseByAccountVendor, debitAccount.id, () => new Map());
-      const vendorKey = tx.description?.trim() || '(no description)';
+      // Prefer the vendor entity (rename-safe); fall back to the raw
+      // description for older rows posted before vendors existed.
+      const vendorKey = tx.vendor?.vendor_name?.trim() || tx.description?.trim() || '(no description)';
       const monthMap = getBucket(vendorMap, vendorKey, () => zeroMonthMap(monthKeys));
       monthMap.set(mKey, monthMap.get(mKey) + cents);
     }

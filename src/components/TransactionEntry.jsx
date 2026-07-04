@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useChartOfAccounts, useExpenseCategories, useProductLines } from '../hooks/useChartOfAccounts';
 import { useTransactions } from '../hooks/useTransactions';
+import { useVendors } from '../hooks/useVendors';
 import { findGuideForCategory } from '../lib/deductionGuides';
 
 const DEDUCTION_TOOLTIPS = {
@@ -21,12 +22,14 @@ export default function TransactionEntry({ onPosted, prefill, editingTransaction
   const { productLines } = useProductLines();
   const { categories } = useExpenseCategories();
   const { postTransaction, postSplitTransaction, updateTransaction } = useTransactions();
+  const { vendors, getOrCreateVendor } = useVendors();
 
   const [transactionId, setTransactionId] = useState(null);
   const [entryType, setEntryType] = useState('expense'); // 'expense' | 'income'
   const [amount, setAmount] = useState('');
   const [transactionDate, setTransactionDate] = useState(new Date().toISOString().slice(0, 10));
   const [description, setDescription] = useState('');
+  const [vendorName, setVendorName] = useState('');
   const [moneyAccountId, setMoneyAccountId] = useState(''); // cash/bank/credit card side
   const [glAccountId, setGlAccountId] = useState(''); // expense or revenue side
   const [productLineId, setProductLineId] = useState('');
@@ -60,6 +63,7 @@ export default function TransactionEntry({ onPosted, prefill, editingTransaction
     setAmount(String(t.amount));
     setTransactionDate(t.transaction_date);
     setDescription(t.description ?? '');
+    setVendorName(t.vendor?.vendor_name ?? '');
     setMoneyAccountId(type === 'expense' ? t.credit_account_id : t.debit_account_id);
     setGlAccountId(type === 'expense' ? t.debit_account_id : t.credit_account_id);
     setProductLineId(t.product_line_id ?? '');
@@ -91,6 +95,7 @@ export default function TransactionEntry({ onPosted, prefill, editingTransaction
     setTransactionId(null);
     setAmount('');
     setDescription('');
+    setVendorName('');
     setMoneyAccountId('');
     setGlAccountId('');
     setProductLineId('');
@@ -121,6 +126,8 @@ export default function TransactionEntry({ onPosted, prefill, editingTransaction
 
     setSubmitting(true);
     try {
+      const vendor = entryType === 'expense' && vendorName.trim() ? await getOrCreateVendor(vendorName) : null;
+
       const debitAccountId = entryType === 'expense' ? glAccountId : moneyAccountId;
       const creditAccountId = entryType === 'expense' ? moneyAccountId : glAccountId;
       const payload = {
@@ -131,6 +138,7 @@ export default function TransactionEntry({ onPosted, prefill, editingTransaction
         transactionDate,
         expenseCategoryId: entryType === 'expense' ? expenseCategoryId || null : null,
         isTaxDeductible: entryType === 'expense' ? isTaxDeductible : null,
+        vendorId: vendor?.id ?? null,
       };
 
       if (isEditing) {
@@ -229,6 +237,28 @@ export default function TransactionEntry({ onPosted, prefill, editingTransaction
             onChange={(e) => setDescription(e.target.value)}
           />
         </div>
+
+        {entryType === 'expense' && (
+          <div className="form-row">
+            <label htmlFor="vendor">Vendor</label>
+            <input
+              id="vendor"
+              type="text"
+              list="vendor-options"
+              placeholder="e.g. OpenAI, Adobe, Google Ads"
+              value={vendorName}
+              onChange={(e) => setVendorName(e.target.value)}
+            />
+            <datalist id="vendor-options">
+              {vendors.map((v) => (
+                <option key={v.id} value={v.vendor_name} />
+              ))}
+            </datalist>
+            <p className="tooltip-hint">
+              Pick an existing vendor or type a new one — used to group this expense account by vendor in Trends.
+            </p>
+          </div>
+        )}
 
         <div className="form-row">
           <label htmlFor="moneyAccount">{entryType === 'expense' ? 'Paid from' : 'Deposited to'}</label>
