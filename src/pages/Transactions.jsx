@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
+import ExpenseReportingGuide from '../components/ExpenseReportingGuide';
 import TransactionEntry from '../components/TransactionEntry';
 import { useClosedPeriods } from '../hooks/useClosedPeriods';
 import { useTransactions } from '../hooks/useTransactions';
@@ -37,6 +38,8 @@ export default function Transactions() {
 
   return (
     <div>
+      <ExpenseReportingGuide />
+
       <div ref={formRef}>
         <h2>{editingTransaction ? 'Edit Transaction' : 'New Transaction'}</h2>
         <TransactionEntry
