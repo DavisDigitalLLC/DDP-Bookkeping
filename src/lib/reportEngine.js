@@ -1,5 +1,6 @@
 import ExcelJS from 'exceljs';
 import { supabase } from './supabaseClient';
+import { addBrandedHeader, BRAND, downloadWorkbook, FONT, loadLogoBuffer, setWorkbookMeta, styleTableHeaderRow, zebraStripe } from './xlsxBranding';
 
 /**
  * Pull every transaction in [startDate, endDate] with its related account,
@@ -59,39 +60,34 @@ function currencyCol(header, key, width = 14) {
   return { header, key, width, style: { numFmt: '$#,##0.00' } };
 }
 
-function styleHeaderRow(sheet) {
-  const row = sheet.getRow(1);
-  row.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-  row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2F6F4F' } };
-  row.alignment = { vertical: 'middle' };
-  sheet.views = [{ state: 'frozen', ySplit: 1 }];
-}
+const DEBIT_NORMAL_TYPES = new Set(['asset', 'expense']);
 
 /**
- * Builds a formatted .xlsx (Summary + Detail sheets) from an already
- * date-and-filter-scoped transaction list, and triggers a browser download.
- * (Not a true macro-enabled .xlsm -- there's no macro content to justify
- * one; this gives the same formatting and opens identically in Excel.)
+ * Builds a branded, formatted .xlsx (Summary + Detail sheets) from an
+ * already date-and-filter-scoped transaction list, and triggers a browser
+ * download. (Not a true macro-enabled .xlsm -- there's no macro content to
+ * justify one; this gives the same formatting and opens identically in
+ * Excel.)
  */
 export async function exportReportToXlsx(transactions, { startDate, endDate, filenamePrefix = 'DDP-Custom-Report' } = {}) {
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = 'DDP Bookkeeping';
-  workbook.created = new Date();
+  setWorkbookMeta(workbook);
+  const logoBuffer = await loadLogoBuffer();
+  const logoImageId = logoBuffer ? workbook.addImage({ buffer: logoBuffer, extension: 'png' }) : null;
 
   // -----------------------------------------------------------------
   // Summary sheet: totals by account, by service line/product, by vendor
   // -----------------------------------------------------------------
   const summarySheet = workbook.addWorksheet('Summary');
-  summarySheet.addRow([`DDP Bookkeeping -- Custom Report`]).font = { bold: true, size: 14 };
-  summarySheet.addRow([`Period: ${startDate} through ${endDate}`]);
-  summarySheet.addRow([`Generated: ${new Date().toLocaleString()}`]);
-  summarySheet.addRow([]);
+  let cursor = addBrandedHeader(summarySheet, {
+    title: 'Custom Report',
+    subtitle: `Period: ${startDate} through ${endDate}`,
+    logoImageId,
+  });
 
   const byAccount = new Map();
   const byProduct = new Map();
   const byVendor = new Map();
-
-  const DEBIT_NORMAL_TYPES = new Set(['asset', 'expense']);
 
   for (const t of transactions) {
     const amount = Number(t.amount);
@@ -122,32 +118,54 @@ export async function exportReportToXlsx(transactions, { startDate, endDate, fil
   }
 
   const addSummaryTable = (title, entries, labelHeader) => {
-    const headerRow = summarySheet.addRow([title]);
-    headerRow.font = { bold: true, size: 12 };
-    const colHeaderRow = summarySheet.addRow([labelHeader, 'Total']);
-    colHeaderRow.font = { bold: true };
+    const titleRow = summarySheet.getRow(cursor);
+    titleRow.getCell(1).value = title;
+    titleRow.getCell(1).font = { name: FONT, size: 13, bold: true, color: { argb: BRAND.deepEvergreen } };
+    cursor += 1;
+
+    const headerRowNum = cursor;
+    const headerRow = summarySheet.getRow(headerRowNum);
+    headerRow.getCell(1).value = labelHeader;
+    headerRow.getCell(2).value = 'Total';
+    styleTableHeaderRow(summarySheet, headerRowNum);
+    cursor += 1;
+
+    const firstDataRow = cursor;
     for (const [label, total] of [...entries.entries()].sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))) {
-      const row = summarySheet.addRow([label, total]);
-      row.getCell(2).numFmt = '$#,##0.00';
+      const row = summarySheet.getRow(cursor);
+      row.getCell(1).value = label;
+      row.getCell(2).value = total;
+      row.getCell(2).numFmt = '$#,##0.00;[RED]($#,##0.00)';
+      row.getCell(1).font = { name: FONT, size: 10 };
+      row.getCell(2).font = { name: FONT, size: 10 };
+      cursor += 1;
     }
-    summarySheet.addRow([]);
+    zebraStripe(summarySheet, firstDataRow, cursor - 1, 2);
+    cursor += 1; // spacer
   };
 
   addSummaryTable('By Account', byAccount, 'Account');
   addSummaryTable('By Product Line', byProduct, 'Service Line › Department › Product');
   if (byVendor.size) addSummaryTable('By Vendor', byVendor, 'Vendor');
 
-  summarySheet.columns.forEach((col, i) => {
-    col.width = i === 0 ? 40 : 16;
-  });
+  summarySheet.getColumn(1).width = 44;
+  summarySheet.getColumn(2).width = 18;
 
   // -----------------------------------------------------------------
   // Detail sheet: every matching transaction, one row each
   // -----------------------------------------------------------------
   const detailSheet = workbook.addWorksheet('Detail');
-  detailSheet.columns = [
+  const detailStartRow = addBrandedHeader(detailSheet, {
+    title: 'Custom Report — Detail',
+    subtitle: `Period: ${startDate} through ${endDate} · ${transactions.length} transaction(s)`,
+    logoImageId,
+    endCol: 12,
+  });
+
+  const columns = [
     { header: 'Date', key: 'date', width: 12 },
     { header: 'Description', key: 'description', width: 32 },
+    { header: 'Notes', key: 'notes', width: 32 },
     { header: 'Debit Account', key: 'debit', width: 26 },
     { header: 'Credit Account', key: 'credit', width: 26 },
     currencyCol('Amount', 'amount'),
@@ -158,12 +176,24 @@ export async function exportReportToXlsx(transactions, { startDate, endDate, fil
     { header: 'Tax Deductible', key: 'deductible', width: 14 },
     { header: 'Status', key: 'status', width: 12 },
   ];
-  styleHeaderRow(detailSheet);
+  columns.forEach((c, i) => {
+    detailSheet.getColumn(i + 1).width = c.width;
+    detailSheet.getColumn(i + 1).key = c.key;
+    if (c.style) detailSheet.getColumn(i + 1).numFmt = c.style.numFmt;
+  });
+  const headerRow = detailSheet.getRow(detailStartRow);
+  columns.forEach((c, i) => {
+    headerRow.getCell(i + 1).value = c.header;
+  });
+  styleTableHeaderRow(detailSheet, detailStartRow);
 
+  let r = detailStartRow + 1;
   for (const t of transactions) {
-    detailSheet.addRow({
+    const row = detailSheet.getRow(r);
+    row.values = {
       date: t.transaction_date,
       description: t.description ?? '',
+      notes: t.notes ?? '',
       debit: t.debit_account ? `${t.debit_account.account_number} — ${t.debit_account.account_name}` : '',
       credit: t.credit_account ? `${t.credit_account.account_number} — ${t.credit_account.account_name}` : '',
       amount: Number(t.amount),
@@ -173,19 +203,12 @@ export async function exportReportToXlsx(transactions, { startDate, endDate, fil
       vendor: t.vendor?.vendor_name ?? '',
       deductible: t.is_tax_deductible === null ? '' : t.is_tax_deductible ? 'Yes' : 'No',
       status: t.status,
-    });
+    };
+    row.getCell('amount').numFmt = '$#,##0.00';
+    row.getCell('amount').font = { name: FONT, size: 10 };
+    r += 1;
   }
+  zebraStripe(detailSheet, detailStartRow + 1, r - 1, columns.length);
 
-  const buffer = await workbook.xlsx.writeBuffer();
-  const blob = new Blob([buffer], {
-    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${filenamePrefix}-${startDate}-to-${endDate}.xlsx`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+  await downloadWorkbook(workbook, `${filenamePrefix}-${startDate}-to-${endDate}.xlsx`);
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useChartOfAccounts, useProductLines } from '../hooks/useChartOfAccounts';
@@ -6,6 +6,7 @@ import { useClosedPeriods } from '../hooks/useClosedPeriods';
 import { useVendors } from '../hooks/useVendors';
 import { useTransactions } from '../hooks/useTransactions';
 import { supabase } from '../lib/supabaseClient';
+import { exportReportToXlsx } from '../lib/reportEngine';
 
 function classify(t) {
   if (t.debit_account?.account_type === 'expense') return 'expense';
@@ -32,8 +33,10 @@ export default function Journal() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [deletingId, setDeletingId] = useState(null);
-  const [expandedYears, setExpandedYears] = useState(() => new Set([String(new Date().getFullYear())]));
+  const [expandedYears, setExpandedYears] = useState(() => new Set());
   const [expandedMonths, setExpandedMonths] = useState(() => new Set());
+  const [expandedNotes, setExpandedNotes] = useState(() => new Set());
+  const [exporting, setExporting] = useState(false);
 
   const [startDate, setStartDate] = useState(searchParams.get('start') || '');
   const [endDate, setEndDate] = useState(searchParams.get('end') || '');
@@ -128,6 +131,12 @@ export default function Journal() {
       next.has(monthKey) ? next.delete(monthKey) : next.add(monthKey);
       return next;
     });
+  const toggleNotes = (id) =>
+    setExpandedNotes((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
 
   const clearFilters = () => {
     setStartDate('');
@@ -142,6 +151,24 @@ export default function Journal() {
   };
 
   const handleEdit = (t) => navigate('/transactions', { state: { editingTransaction: t } });
+
+  const handleExport = async (rows) => {
+    if (rows.length === 0) return;
+    setExporting(true);
+    setError('');
+    try {
+      const dates = rows.map((t) => t.transaction_date).sort();
+      await exportReportToXlsx(rows, {
+        startDate: startDate || dates[0],
+        endDate: endDate || dates[dates.length - 1],
+        filenamePrefix: 'DDP-Journal',
+      });
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const handleDelete = async (t) => {
     if (!window.confirm(`Delete "${t.description || 'this transaction'}" for $${Number(t.amount).toFixed(2)}? This cannot be undone.`)) {
@@ -165,6 +192,7 @@ export default function Journal() {
         <tr>
           <th>Date</th>
           <th>Description</th>
+          <th>Notes</th>
           <th>Debit</th>
           <th>Credit</th>
           <th>Amount</th>
@@ -184,32 +212,53 @@ export default function Journal() {
             : t.status === 'reconciled'
               ? 'Unreconcile in Bank Reconciliation before editing'
               : '';
+          const notesOpen = expandedNotes.has(t.id);
           return (
-            <tr key={t.id}>
-              <td>
-                {t.transaction_date}
-                {periodClosed && ' 🔒'}
-              </td>
-              <td title={t.notes || undefined}>
-                {t.description}
-                {t.notes && ' 📝'}
-              </td>
-              <td>{t.debit_account?.account_name}</td>
-              <td>{t.credit_account?.account_name}</td>
-              <td>${Number(t.amount).toFixed(2)}</td>
-              <td>{t.vendor?.vendor_name ?? '—'}</td>
-              <td>{t.product_line?.product_name ?? '—'}</td>
-              <td>{t.is_tax_deductible === null ? '—' : t.is_tax_deductible ? 'Yes' : 'No'}</td>
-              <td>{t.status}</td>
-              <td style={{ whiteSpace: 'nowrap' }}>
-                <button type="button" className="secondary" onClick={() => handleEdit(t)} disabled={locked} title={lockReason} style={{ marginRight: 6 }}>
-                  Edit
-                </button>
-                <button type="button" className="secondary" onClick={() => handleDelete(t)} disabled={locked || deletingId === t.id} title={lockReason}>
-                  {deletingId === t.id ? 'Deleting…' : 'Delete'}
-                </button>
-              </td>
-            </tr>
+            <Fragment key={t.id}>
+              <tr>
+                <td>
+                  {t.transaction_date}
+                  {periodClosed && ' 🔒'}
+                </td>
+                <td>{t.description}</td>
+                <td>
+                  {t.notes ? (
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => toggleNotes(t.id)}
+                      style={{ padding: '2px 8px', fontSize: '0.85rem' }}
+                    >
+                      📝 {notesOpen ? 'Hide' : 'View'}
+                    </button>
+                  ) : (
+                    '—'
+                  )}
+                </td>
+                <td>{t.debit_account?.account_name}</td>
+                <td>{t.credit_account?.account_name}</td>
+                <td>${Number(t.amount).toFixed(2)}</td>
+                <td>{t.vendor?.vendor_name ?? '—'}</td>
+                <td>{t.product_line?.product_name ?? '—'}</td>
+                <td>{t.is_tax_deductible === null ? '—' : t.is_tax_deductible ? 'Yes' : 'No'}</td>
+                <td>{t.status}</td>
+                <td style={{ whiteSpace: 'nowrap' }}>
+                  <button type="button" className="secondary" onClick={() => handleEdit(t)} disabled={locked} title={lockReason} style={{ marginRight: 6 }}>
+                    Edit
+                  </button>
+                  <button type="button" className="secondary" onClick={() => handleDelete(t)} disabled={locked || deletingId === t.id} title={lockReason}>
+                    {deletingId === t.id ? 'Deleting…' : 'Delete'}
+                  </button>
+                </td>
+              </tr>
+              {notesOpen && (
+                <tr>
+                  <td colSpan={11} style={{ background: 'var(--ddp-soft-gray)', whiteSpace: 'pre-wrap' }}>
+                    <strong>Note:</strong> {t.notes}
+                  </td>
+                </tr>
+              )}
+            </Fragment>
           );
         })}
       </tbody>
@@ -309,7 +358,12 @@ export default function Journal() {
         <p>Loading…</p>
       ) : hasActiveFilter ? (
         <div className="card">
-          <h3>{filtered.length} matching transaction(s)</h3>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+            <h3 style={{ margin: 0 }}>{filtered.length} matching transaction(s)</h3>
+            <button type="button" className="secondary" onClick={() => handleExport(filtered)} disabled={exporting || filtered.length === 0}>
+              {exporting ? 'Exporting…' : 'Export to .xlsx'}
+            </button>
+          </div>
           {filtered.length === 0 ? <p className="tooltip-hint">No transactions match these filters.</p> : renderRows(filtered)}
         </div>
       ) : transactions.length === 0 ? (
@@ -347,7 +401,20 @@ export default function Journal() {
                         <span>{monthLabel(monthKey)}</span>
                         <span>{rows.length} transaction(s) {monthExpanded ? '▲' : '▼'}</span>
                       </button>
-                      {monthExpanded && <div style={{ marginTop: 8, overflowX: 'auto' }}>{renderRows(rows)}</div>}
+                      {monthExpanded && (
+                        <div style={{ marginTop: 8 }}>
+                          <button
+                            type="button"
+                            className="secondary"
+                            style={{ marginBottom: 8 }}
+                            onClick={() => handleExport(rows)}
+                            disabled={exporting}
+                          >
+                            {exporting ? 'Exporting…' : `Export ${monthLabel(monthKey)} to .xlsx`}
+                          </button>
+                          <div style={{ overflowX: 'auto' }}>{renderRows(rows)}</div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { currentMonthKey, generateHierarchicalTrends, shiftMonthKey } from '../lib/trendsEngine';
+import { exportIncomeStatementToXlsx } from '../lib/incomeStatementExport';
 
 const MONTH_FORMATTER = new Intl.DateTimeFormat('en-US', { month: 'short', year: '2-digit' });
 const STAT_COL_WIDTH = 100;
@@ -190,6 +191,7 @@ export default function Trends() {
   const [customEnd, setCustomEnd] = useState(THIS_MONTH);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [exporting, setExporting] = useState(false);
 
   const startMonth = windowMode === 'rolling' ? shiftMonthKey(THIS_MONTH, -(rollingMonths - 1)) : customStart;
   const endMonth = windowMode === 'rolling' ? THIS_MONTH : customEnd;
@@ -211,9 +213,27 @@ export default function Trends() {
     })();
   }, [user, startMonth, endMonth, rangeInvalid]);
 
+  const handleExport = async () => {
+    if (!trends) return;
+    setExporting(true);
+    setError('');
+    try {
+      await exportIncomeStatementToXlsx(trends, { startMonth, endMonth });
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div>
-      <h2>Income Statement</h2>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+        <h2 style={{ marginBottom: 0 }}>Income Statement</h2>
+        <button type="button" className="secondary" onClick={handleExport} disabled={exporting || !trends}>
+          {exporting ? 'Exporting…' : 'Export to .xlsx'}
+        </button>
+      </div>
       <p className="tooltip-hint" style={{ marginBottom: 16 }}>
         Revenue and expenses by Service Line › Department › Product, plus expenses by GL account and vendor, from{' '}
         {startMonth} through {endMonth}. Click any dollar amount to see the transactions behind it in the Journal.

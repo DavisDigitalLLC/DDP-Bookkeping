@@ -198,6 +198,7 @@ export default function CustomReport() {
                   <tr>
                     <th>Date</th>
                     <th>Description</th>
+                    <th>Notes</th>
                     <th>Debit</th>
                     <th>Credit</th>
                     <th>Amount</th>
@@ -210,6 +211,7 @@ export default function CustomReport() {
                     <tr key={t.id}>
                       <td>{t.transaction_date}</td>
                       <td>{t.description}</td>
+                      <td title={t.notes || undefined}>{t.notes ? '📝' : '—'}</td>
                       <td>{t.debit_account?.account_name}</td>
                       <td>{t.credit_account?.account_name}</td>
                       <td>${Number(t.amount).toFixed(2)}</td>
