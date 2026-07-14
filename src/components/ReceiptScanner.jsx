@@ -3,22 +3,51 @@ import { supabase } from '../lib/supabaseClient';
 import { scanReceipt } from '../lib/ocrService';
 import { useAuth } from '../hooks/useAuth';
 
+function isHeic(file) {
+  return /image\/hei[cf]/i.test(file.type) || /\.hei[cf]$/i.test(file.name);
+}
+
 export default function ReceiptScanner({ onSaved }) {
   const { user } = useAuth();
   const [file, setFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
+  const [converting, setConverting] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState(null); // { extractedVendor, extractedDate, extractedAmount, confidence, rawText }
 
-  const handleFileChange = (e) => {
+  const handleFileChange = async (e) => {
     const selected = e.target.files?.[0];
     if (!selected) return;
-    setFile(selected);
-    setPreviewUrl(URL.createObjectURL(selected));
     setResult(null);
     setError('');
+
+    if (!isHeic(selected)) {
+      setFile(selected);
+      setPreviewUrl(URL.createObjectURL(selected));
+      return;
+    }
+
+    // iPhones save photos as HEIC by default -- almost no browser (including
+    // Chrome) can decode it client-side, for the preview <img> or for
+    // Tesseract's canvas-based OCR. Convert to JPEG here so both work, and
+    // so what ends up in storage is actually viewable later.
+    setConverting(true);
+    try {
+      const { default: heic2any } = await import('heic2any');
+      const converted = await heic2any({ blob: selected, toType: 'image/jpeg', quality: 0.9 });
+      const jpegBlob = Array.isArray(converted) ? converted[0] : converted;
+      const jpegFile = new File([jpegBlob], selected.name.replace(/\.hei[cf]$/i, '.jpg'), { type: 'image/jpeg' });
+      setFile(jpegFile);
+      setPreviewUrl(URL.createObjectURL(jpegFile));
+    } catch (err) {
+      setError(`Couldn't convert this HEIC photo (${err.message || 'unknown error'}) -- try exporting it as a JPEG first.`);
+      setFile(null);
+      setPreviewUrl(null);
+    } finally {
+      setConverting(false);
+    }
   };
 
   const handleScan = async () => {
@@ -29,7 +58,7 @@ export default function ReceiptScanner({ onSaved }) {
       const extracted = await scanReceipt(file);
       setResult(extracted);
     } catch (err) {
-      setError(`OCR failed: ${err.message}`);
+      setError(`OCR failed: ${err.message || 'unknown error -- try a clearer photo or a JPEG/PNG.'}`);
     } finally {
       setScanning(false);
     }
@@ -77,8 +106,10 @@ export default function ReceiptScanner({ onSaved }) {
       <h3>Scan a receipt</h3>
       <div className="form-row">
         <label htmlFor="receiptFile">Receipt image</label>
-        <input id="receiptFile" type="file" accept="image/*" onChange={handleFileChange} />
+        <input id="receiptFile" type="file" accept="image/*" onChange={handleFileChange} disabled={converting} />
       </div>
+
+      {converting && <p className="tooltip-hint">Converting HEIC photo…</p>}
 
       {previewUrl && (
         <img
