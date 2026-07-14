@@ -2,26 +2,7 @@ import { useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { scanReceipt } from '../lib/ocrService';
 import { useAuth } from '../hooks/useAuth';
-
-function isHeic(file) {
-  return /image\/hei[cf]/i.test(file.type) || /\.hei[cf]$/i.test(file.name);
-}
-
-/** Server-side fallback via /api/convert-heic (CloudConvert) for HEIC
- * variants the browser's WASM decoder can't handle. */
-async function convertHeicServerSide(file) {
-  const resp = await fetch('/api/convert-heic', {
-    method: 'POST',
-    headers: { 'Content-Type': file.type || 'application/octet-stream', 'X-File-Name': file.name },
-    body: file,
-  });
-  if (!resp.ok) {
-    const body = await resp.json().catch(() => ({}));
-    throw new Error(body.error || `Server conversion failed (${resp.status})`);
-  }
-  const jpegBlob = await resp.blob();
-  return new File([jpegBlob], file.name.replace(/\.hei[cf]$/i, '.jpg'), { type: 'image/jpeg' });
-}
+import { isHeic, isPdf, normalizeReceiptFile } from '../lib/fileConversion';
 
 export default function ReceiptScanner({ onSaved }) {
   const { user } = useAuth();
@@ -41,47 +22,34 @@ export default function ReceiptScanner({ onSaved }) {
     setError('');
     setInfo('');
 
-    if (!isHeic(selected)) {
+    if (!isHeic(selected) && !isPdf(selected)) {
       setFile(selected);
       setPreviewUrl(URL.createObjectURL(selected));
       return;
     }
 
-    // iPhones save photos as HEIC by default -- almost no browser (including
-    // Chrome) can decode it client-side, for the preview <img> or for
-    // Tesseract's canvas-based OCR. Convert to JPEG here so both work, and
-    // so what ends up in storage is actually viewable later.
+    // HEIC (iPhone photos) and PDF both need converting to a plain JPEG
+    // before the browser can preview them or Tesseract can OCR them.
     setConverting(true);
+    if (isPdf(selected)) setInfo('Rendering PDF page 1…');
     try {
-      const { default: heic2any } = await import('heic2any');
-      const converted = await heic2any({ blob: selected, toType: 'image/jpeg', quality: 0.9 });
-      const jpegBlob = Array.isArray(converted) ? converted[0] : converted;
-      const jpegFile = new File([jpegBlob], selected.name.replace(/\.hei[cf]$/i, '.jpg'), { type: 'image/jpeg' });
-      setFile(jpegFile);
-      setPreviewUrl(URL.createObjectURL(jpegFile));
-      setConverting(false);
-      return;
-    } catch (clientErr) {
-      // Some HEIC variants (often edited/duplicated photos) use an encoding
-      // the in-browser WASM decoder doesn't support. Fall back to a
-      // server-side conversion (full native decoder) before giving up.
-      setInfo('This photo needs server-side conversion -- trying that next…');
-    }
-
-    try {
-      const jpegFile = await convertHeicServerSide(selected);
-      setFile(jpegFile);
-      setPreviewUrl(URL.createObjectURL(jpegFile));
-      setInfo('');
-    } catch (serverErr) {
-      // Both conversion paths failed. Don't block the upload -- save the
-      // original file and skip straight to manual entry instead.
-      setFile(selected);
-      setPreviewUrl(null);
-      setInfo(
-        `This photo's format can't be auto-scanned or previewed (${serverErr.message || 'unsupported HEIC variant'}) -- the file will still be saved. Enter the details below manually, or re-export it as a JPEG for scanning next time.`
-      );
-      setResult({ extractedVendor: null, extractedDate: null, extractedAmount: null, confidence: 0, rawText: '' });
+      const { file: converted, note, unsupported, error: convertError } = await normalizeReceiptFile(selected, {
+        onStatus: setInfo,
+      });
+      if (unsupported) {
+        // Conversion failed entirely -- don't block the upload. Save the
+        // original file and skip straight to manual entry.
+        setFile(selected);
+        setPreviewUrl(null);
+        setInfo(
+          `This file's format can't be auto-scanned or previewed (${convertError}) -- the file will still be saved. Enter the details below manually.`
+        );
+        setResult({ extractedVendor: null, extractedDate: null, extractedAmount: null, confidence: 0, rawText: '' });
+      } else {
+        setFile(converted);
+        setPreviewUrl(URL.createObjectURL(converted));
+        setInfo(note ?? '');
+      }
     } finally {
       setConverting(false);
     }
@@ -143,12 +111,18 @@ export default function ReceiptScanner({ onSaved }) {
     <div className="card">
       <h3>Scan a receipt</h3>
       <div className="form-row">
-        <label htmlFor="receiptFile">Receipt image</label>
-        <input id="receiptFile" type="file" accept="image/*" onChange={handleFileChange} disabled={converting} />
+        <label htmlFor="receiptFile">Receipt file (image, HEIC, or PDF)</label>
+        <input
+          id="receiptFile"
+          type="file"
+          accept="image/*,.heic,.heif,application/pdf,.pdf"
+          onChange={handleFileChange}
+          disabled={converting}
+        />
       </div>
 
-      {converting && <p className="tooltip-hint">Converting HEIC photo…</p>}
-      {info && <p className="tooltip-hint">{info}</p>}
+      {converting && <p className="tooltip-hint">{info || 'Converting…'}</p>}
+      {!converting && info && <p className="tooltip-hint">{info}</p>}
 
       {previewUrl && (
         <img
