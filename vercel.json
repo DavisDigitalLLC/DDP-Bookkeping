@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "api/convert-heic.js": {
+      "maxDuration": 30
+    }
+  }
+}

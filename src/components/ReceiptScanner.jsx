@@ -7,6 +7,22 @@ function isHeic(file) {
   return /image\/hei[cf]/i.test(file.type) || /\.hei[cf]$/i.test(file.name);
 }
 
+/** Server-side fallback via /api/convert-heic (CloudConvert) for HEIC
+ * variants the browser's WASM decoder can't handle. */
+async function convertHeicServerSide(file) {
+  const resp = await fetch('/api/convert-heic', {
+    method: 'POST',
+    headers: { 'Content-Type': file.type || 'application/octet-stream', 'X-File-Name': file.name },
+    body: file,
+  });
+  if (!resp.ok) {
+    const body = await resp.json().catch(() => ({}));
+    throw new Error(body.error || `Server conversion failed (${resp.status})`);
+  }
+  const jpegBlob = await resp.blob();
+  return new File([jpegBlob], file.name.replace(/\.hei[cf]$/i, '.jpg'), { type: 'image/jpeg' });
+}
+
 export default function ReceiptScanner({ onSaved }) {
   const { user } = useAuth();
   const [file, setFile] = useState(null);
@@ -43,14 +59,27 @@ export default function ReceiptScanner({ onSaved }) {
       const jpegFile = new File([jpegBlob], selected.name.replace(/\.hei[cf]$/i, '.jpg'), { type: 'image/jpeg' });
       setFile(jpegFile);
       setPreviewUrl(URL.createObjectURL(jpegFile));
-    } catch (err) {
+      setConverting(false);
+      return;
+    } catch (clientErr) {
       // Some HEIC variants (often edited/duplicated photos) use an encoding
-      // the in-browser decoder doesn't support. Don't block the upload --
-      // save the original file and skip straight to manual entry instead.
+      // the in-browser WASM decoder doesn't support. Fall back to a
+      // server-side conversion (full native decoder) before giving up.
+      setInfo('This photo needs server-side conversion -- trying that next…');
+    }
+
+    try {
+      const jpegFile = await convertHeicServerSide(selected);
+      setFile(jpegFile);
+      setPreviewUrl(URL.createObjectURL(jpegFile));
+      setInfo('');
+    } catch (serverErr) {
+      // Both conversion paths failed. Don't block the upload -- save the
+      // original file and skip straight to manual entry instead.
       setFile(selected);
       setPreviewUrl(null);
       setInfo(
-        `This photo's format can't be auto-scanned or previewed (${err.message || 'unsupported HEIC variant'}) -- the file will still be saved. Enter the details below manually, or re-export it as a JPEG for scanning next time.`
+        `This photo's format can't be auto-scanned or previewed (${serverErr.message || 'unsupported HEIC variant'}) -- the file will still be saved. Enter the details below manually, or re-export it as a JPEG for scanning next time.`
       );
       setResult({ extractedVendor: null, extractedDate: null, extractedAmount: null, confidence: 0, rawText: '' });
     } finally {
