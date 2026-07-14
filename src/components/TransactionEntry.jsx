@@ -20,7 +20,7 @@ const DEDUCTION_TOOLTIPS = {
 let lineItemSeq = 0;
 function blankLineItem() {
   lineItemSeq += 1;
-  return { key: `line-${lineItemSeq}`, amount: '', accountId: '', productLineId: '', expenseCategoryId: '', isTaxDeductible: true };
+  return { key: `line-${lineItemSeq}`, amount: '', accountId: '', productLineId: '', expenseCategoryId: '', isTaxDeductible: true, notes: '' };
 }
 
 export default function TransactionEntry({ onPosted, prefill, editingTransaction, onCancelEdit }) {
@@ -37,6 +37,7 @@ export default function TransactionEntry({ onPosted, prefill, editingTransaction
   const [amount, setAmount] = useState('');
   const [transactionDate, setTransactionDate] = useState(new Date().toISOString().slice(0, 10));
   const [description, setDescription] = useState('');
+  const [notes, setNotes] = useState('');
   const [vendorName, setVendorName] = useState('');
   const [moneyAccountId, setMoneyAccountId] = useState(''); // cash/bank/credit card side
   const [glAccountId, setGlAccountId] = useState(''); // expense or revenue side (single mode / splitProduct mode)
@@ -72,6 +73,7 @@ export default function TransactionEntry({ onPosted, prefill, editingTransaction
     setAmount(String(t.amount));
     setTransactionDate(t.transaction_date);
     setDescription(t.description ?? '');
+    setNotes(t.notes ?? '');
     setVendorName(t.vendor?.vendor_name ?? '');
     setMoneyAccountId(type === 'expense' ? t.credit_account_id : t.debit_account_id);
     setGlAccountId(type === 'expense' ? t.debit_account_id : t.credit_account_id);
@@ -107,6 +109,7 @@ export default function TransactionEntry({ onPosted, prefill, editingTransaction
     setMode('single');
     setAmount('');
     setDescription('');
+    setNotes('');
     setVendorName('');
     setMoneyAccountId('');
     setGlAccountId('');
@@ -198,6 +201,7 @@ export default function TransactionEntry({ onPosted, prefill, editingTransaction
             productLineId: l.productLineId || null,
             expenseCategoryId: entryType === 'expense' ? l.expenseCategoryId || null : null,
             isTaxDeductible: entryType === 'expense' ? l.isTaxDeductible : null,
+            notes: l.notes || null,
           })),
         };
 
@@ -224,6 +228,7 @@ export default function TransactionEntry({ onPosted, prefill, editingTransaction
         creditAccountId,
         amount: Number(amount),
         description,
+        notes: notes || null,
         transactionDate,
         expenseCategoryId: entryType === 'expense' ? expenseCategoryId || null : null,
         isTaxDeductible: entryType === 'expense' ? isTaxDeductible : null,
@@ -377,6 +382,19 @@ export default function TransactionEntry({ onPosted, prefill, editingTransaction
             onChange={(e) => setDescription(e.target.value)}
           />
         </div>
+
+        {mode !== 'itemized' && (
+          <div className="form-row">
+            <label htmlFor="notes">Notes (optional)</label>
+            <textarea
+              id="notes"
+              rows={2}
+              placeholder="Business purpose, context, or anything worth documenting -- e.g. 'MacBook Pro for app development'"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+          </div>
+        )}
 
         {entryType === 'expense' && (
           <div className="form-row">
@@ -546,6 +564,16 @@ export default function TransactionEntry({ onPosted, prefill, editingTransaction
                         </option>
                       ))}
                     </select>
+                  </div>
+
+                  <div className="form-row">
+                    <label htmlFor={`${line.key}-notes`}>Notes (optional)</label>
+                    <textarea
+                      id={`${line.key}-notes`}
+                      rows={2}
+                      value={line.notes}
+                      onChange={(e) => updateLineItem(line.key, { notes: e.target.value })}
+                    />
                   </div>
 
                   {entryType === 'expense' && (

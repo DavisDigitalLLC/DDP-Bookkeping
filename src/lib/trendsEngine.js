@@ -38,7 +38,7 @@ function addInto(target, source) {
   return target;
 }
 
-function toRow({ level, label, glNumber = '', monthKeys, monthCentsMap, bold = false }) {
+function toRow({ level, label, glNumber = '', monthKeys, monthCentsMap, bold = false, filter = null }) {
   const values = monthKeys.map((m) => monthCentsMap.get(m) ?? 0);
   const totalCents = values.reduce((s, v) => s + v, 0);
   return {
@@ -49,6 +49,11 @@ function toRow({ level, label, glNumber = '', monthKeys, monthCentsMap, bold = f
     monthlyTotals: Object.fromEntries(monthKeys.map((m, i) => [m, fromCents(values[i])])),
     total: fromCents(totalCents),
     average: fromCents(Math.round(totalCents / monthKeys.length)),
+    // Reconstructs the exact transaction set behind this row for the
+    // Journal drill-through: { accountId? , productLineId?, serviceLine?,
+    // department?, vendorName? }. null on rows that don't map to a single
+    // filterable set (e.g. Net Income).
+    filter,
   };
 }
 
@@ -123,6 +128,7 @@ function buildProductHierarchyRows({ byProduct, productLines, monthKeys, numberi
             glNumber: numbers.get(`${serviceLine}|${department}|${product.id}`) ?? '',
             monthKeys,
             monthCentsMap: productCents,
+            filter: { productLineId: product.id },
           })
         );
         addInto(deptCents, productCents);
@@ -138,6 +144,7 @@ function buildProductHierarchyRows({ byProduct, productLines, monthKeys, numberi
             monthKeys,
             monthCentsMap: deptCents,
             bold: true,
+            filter: { serviceLine, department },
           })
         );
       }
@@ -152,6 +159,7 @@ function buildProductHierarchyRows({ byProduct, productLines, monthKeys, numberi
         monthKeys,
         monthCentsMap: slCents,
         bold: true,
+        filter: { serviceLine },
       })
     );
     rows.push(...slRows);
@@ -310,7 +318,9 @@ export async function generateHierarchicalTrends(userId, { startMonth, endMonth 
     const vendorRows = [];
 
     for (const [vendor, monthMap] of vendorMap.entries()) {
-      vendorRows.push(toRow({ level: 1, label: vendor, monthKeys, monthCentsMap: monthMap }));
+      vendorRows.push(
+        toRow({ level: 1, label: vendor, monthKeys, monthCentsMap: monthMap, filter: { accountId: account.id, vendorName: vendor } })
+      );
       addInto(accountCents, monthMap);
     }
     vendorRows.sort((a, b) => b.total - a.total);
@@ -323,6 +333,7 @@ export async function generateHierarchicalTrends(userId, { startMonth, endMonth 
         monthKeys,
         monthCentsMap: accountCents,
         bold: true,
+        filter: { accountId: account.id },
       })
     );
     operatingRows.push(...vendorRows);
@@ -351,6 +362,7 @@ export async function generateHierarchicalTrends(userId, { startMonth, endMonth 
         glNumber: account.account_number,
         monthKeys,
         monthCentsMap: accountCents,
+        filter: { accountId: account.id },
       })
     );
     addInto(totalFixedCents, accountCents);

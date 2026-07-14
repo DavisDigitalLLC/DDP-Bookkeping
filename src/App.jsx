@@ -4,6 +4,7 @@ import Navigation from './components/Navigation';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Transactions from './pages/Transactions';
+import Journal from './pages/Journal';
 import Receipts from './pages/Receipts';
 import Guides from './pages/Guides';
 import Reconciliation from './pages/Reconciliation';
@@ -44,6 +45,7 @@ export default function App() {
                 <Routes>
                   <Route path="/" element={<Dashboard />} />
                   <Route path="/transactions" element={<Transactions />} />
+                  <Route path="/journal" element={<Journal />} />
                   <Route path="/receipts" element={<Receipts />} />
                   <Route path="/guides" element={<Guides />} />
                   <Route path="/reconciliation" element={<Reconciliation />} />

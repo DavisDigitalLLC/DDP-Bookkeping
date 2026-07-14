@@ -1,123 +1,32 @@
-import { useRef, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import ExpenseReportingGuide from '../components/ExpenseReportingGuide';
 import TransactionEntry from '../components/TransactionEntry';
-import { useClosedPeriods } from '../hooks/useClosedPeriods';
-import { useTransactions } from '../hooks/useTransactions';
 
 export default function Transactions() {
-  const { transactions, refetch, deleteTransaction } = useTransactions({ limit: 50 });
-  const { isMonthClosed } = useClosedPeriods();
   const location = useLocation();
-  const [editingTransaction, setEditingTransaction] = useState(null);
-  const [deletingId, setDeletingId] = useState(null);
-  const [error, setError] = useState('');
-  const formRef = useRef(null);
+  const [editingTransaction, setEditingTransaction] = useState(location.state?.editingTransaction ?? null);
 
-  const handleEdit = (t) => {
-    setError('');
-    setEditingTransaction(t);
-    formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
-
-  const handleDelete = async (t) => {
-    if (!window.confirm(`Delete "${t.description || 'this transaction'}" for $${Number(t.amount).toFixed(2)}? This cannot be undone.`)) {
-      return;
-    }
-    setError('');
-    setDeletingId(t.id);
-    try {
-      await deleteTransaction(t.id);
-      if (editingTransaction?.id === t.id) setEditingTransaction(null);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setDeletingId(null);
-    }
-  };
+  useEffect(() => {
+    if (location.state?.editingTransaction) setEditingTransaction(location.state.editingTransaction);
+  }, [location.state]);
 
   return (
     <div>
       <ExpenseReportingGuide />
 
-      <div ref={formRef}>
+      <div>
         <h2>{editingTransaction ? 'Edit Transaction' : 'New Transaction'}</h2>
         <TransactionEntry
-          onPosted={refetch}
           prefill={location.state?.prefill}
           editingTransaction={editingTransaction}
           onCancelEdit={() => setEditingTransaction(null)}
         />
       </div>
 
-      <div className="card">
-        <h3>All transactions (journal)</h3>
-        {error && <p className="error-text">{error}</p>}
-        {transactions.length === 0 ? (
-          <p className="tooltip-hint">Nothing posted yet.</p>
-        ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Description</th>
-                <th>Debit</th>
-                <th>Credit</th>
-                <th>Amount</th>
-                <th>Deductible</th>
-                <th>Status</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {transactions.map((t) => {
-                const periodClosed = isMonthClosed(t.transaction_date.slice(0, 7));
-                const locked = t.status === 'reconciled' || periodClosed;
-                const lockReason = periodClosed
-                  ? 'This month is closed -- reopen it in Manage > Month-End Close to edit'
-                  : t.status === 'reconciled'
-                    ? 'Unreconcile in Bank Reconciliation before editing'
-                    : '';
-                return (
-                  <tr key={t.id}>
-                    <td>
-                      {t.transaction_date}
-                      {periodClosed && ' 🔒'}
-                    </td>
-                    <td>{t.description}</td>
-                    <td>{t.debit_account?.account_name}</td>
-                    <td>{t.credit_account?.account_name}</td>
-                    <td>${Number(t.amount).toFixed(2)}</td>
-                    <td>{t.is_tax_deductible === null ? '—' : t.is_tax_deductible ? 'Yes' : 'No'}</td>
-                    <td>{t.status}</td>
-                    <td style={{ whiteSpace: 'nowrap' }}>
-                      <button
-                        type="button"
-                        className="secondary"
-                        onClick={() => handleEdit(t)}
-                        disabled={locked}
-                        title={lockReason}
-                        style={{ marginRight: 6 }}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        className="secondary"
-                        onClick={() => handleDelete(t)}
-                        disabled={locked || deletingId === t.id}
-                        title={lockReason}
-                      >
-                        {deletingId === t.id ? 'Deleting…' : 'Delete'}
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-      </div>
+      <p className="tooltip-hint">
+        Looking for a past transaction? See the <Link to="/journal">Journal</Link>.
+      </p>
     </div>
   );
 }

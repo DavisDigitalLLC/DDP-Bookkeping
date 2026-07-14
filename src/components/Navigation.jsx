@@ -14,9 +14,6 @@ export default function Navigation() {
       <NavLink to="/" end className={({ isActive }) => (isActive ? 'active' : '')}>
         Dashboard
       </NavLink>
-      <NavLink to="/transactions" className={({ isActive }) => (isActive ? 'active' : '')}>
-        Transactions
-      </NavLink>
       <NavLink to="/receipts" className={({ isActive }) => (isActive ? 'active' : '')}>
         Receipts
       </NavLink>
@@ -28,6 +25,14 @@ export default function Navigation() {
       </NavLink>
       <NavLink to="/import-kdp" className={({ isActive }) => (isActive ? 'active' : '')}>
         Import KDP Royalties
+      </NavLink>
+
+      <div className="nav-section-label">Journal</div>
+      <NavLink to="/transactions" end className={({ isActive }) => (isActive ? 'active' : '')}>
+        +New Transaction
+      </NavLink>
+      <NavLink to="/journal" className={({ isActive }) => (isActive ? 'active' : '')}>
+        Journal
       </NavLink>
 
       <div className="nav-section-label">Reports</div>

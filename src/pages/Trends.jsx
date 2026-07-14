@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { currentMonthKey, generateHierarchicalTrends, shiftMonthKey } from '../lib/trendsEngine';
 
@@ -46,7 +47,34 @@ const STAT_COLS = [
   { key: 'average', label: 'Average', right: 0 },
 ];
 
+function lastDayOfMonth(monthKey) {
+  const [y, m] = monthKey.split('-').map(Number);
+  return new Date(y, m, 0).toISOString().slice(0, 10);
+}
+
+function journalHref(filter, startDate, endDate) {
+  const params = new URLSearchParams({ start: startDate, end: endDate });
+  if (filter.accountId) params.set('accountId', filter.accountId);
+  if (filter.productLineId) params.set('productLineId', filter.productLineId);
+  if (filter.serviceLine) params.set('serviceLine', filter.serviceLine);
+  if (filter.department) params.set('department', filter.department);
+  if (filter.vendorName) params.set('vendorName', filter.vendorName);
+  return `/journal?${params.toString()}`;
+}
+
+const cellButtonStyle = {
+  background: 'none',
+  border: 'none',
+  padding: 0,
+  font: 'inherit',
+  color: 'inherit',
+  cursor: 'pointer',
+  textDecoration: 'underline',
+  textDecorationStyle: 'dotted',
+};
+
 function TrendTable({ title, rows, months, description }) {
+  const navigate = useNavigate();
   if (!rows || rows.length === 0) {
     return (
       <div className="card">
@@ -109,16 +137,39 @@ function TrendTable({ title, rows, months, description }) {
                 >
                   {truncateLabel(row.label)}
                 </td>
-                {months.map((m) => (
-                  <td key={m} style={{ textAlign: 'right', whiteSpace: 'nowrap', padding: '10px 14px', fontWeight: row.bold ? 600 : 400 }}>
-                    {money(row.monthlyTotals[m])}
-                  </td>
-                ))}
-                {STAT_COLS.map((c) => (
-                  <td key={c.key} style={{ ...stickyRight(c.right), fontWeight: row.bold ? 600 : 400 }}>
-                    {money(row[c.key])}
-                  </td>
-                ))}
+                {months.map((m) => {
+                  const value = row.monthlyTotals[m];
+                  const clickable = row.filter && value !== 0;
+                  return (
+                    <td key={m} style={{ textAlign: 'right', whiteSpace: 'nowrap', padding: '10px 14px', fontWeight: row.bold ? 600 : 400 }}>
+                      {clickable ? (
+                        <button type="button" style={cellButtonStyle} onClick={() => navigate(journalHref(row.filter, `${m}-01`, lastDayOfMonth(m)))}>
+                          {money(value)}
+                        </button>
+                      ) : (
+                        money(value)
+                      )}
+                    </td>
+                  );
+                })}
+                {STAT_COLS.map((c) => {
+                  const clickable = c.key === 'total' && row.filter && row.total !== 0;
+                  return (
+                    <td key={c.key} style={{ ...stickyRight(c.right), fontWeight: row.bold ? 600 : 400 }}>
+                      {clickable ? (
+                        <button
+                          type="button"
+                          style={cellButtonStyle}
+                          onClick={() => navigate(journalHref(row.filter, `${months[0]}-01`, lastDayOfMonth(months[months.length - 1])))}
+                        >
+                          {money(row[c.key])}
+                        </button>
+                      ) : (
+                        money(row[c.key])
+                      )}
+                    </td>
+                  );
+                })}
               </tr>
             ))}
           </tbody>
@@ -165,7 +216,7 @@ export default function Trends() {
       <h2>Trends</h2>
       <p className="tooltip-hint" style={{ marginBottom: 16 }}>
         Revenue and expenses by Service Line › Department › Product, plus expenses by GL account and vendor, from{' '}
-        {startMonth} through {endMonth}.
+        {startMonth} through {endMonth}. Click any dollar amount to see the transactions behind it in the Journal.
       </p>
 
       <div style={{ display: 'flex', gap: 20, marginBottom: 20, flexWrap: 'wrap', alignItems: 'flex-end' }}>
