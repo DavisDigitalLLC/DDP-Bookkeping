@@ -213,7 +213,7 @@ export default function Trends() {
 
   return (
     <div>
-      <h2>Trends</h2>
+      <h2>Income Statement</h2>
       <p className="tooltip-hint" style={{ marginBottom: 16 }}>
         Revenue and expenses by Service Line › Department › Product, plus expenses by GL account and vendor, from{' '}
         {startMonth} through {endMonth}. Click any dollar amount to see the transactions behind it in the Journal.

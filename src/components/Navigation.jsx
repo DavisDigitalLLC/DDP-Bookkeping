@@ -37,7 +37,7 @@ export default function Navigation() {
 
       <div className="nav-section-label">Reports</div>
       <NavLink to="/trends" className={({ isActive }) => (isActive ? 'active' : '')}>
-        Trends
+        Income Statement
       </NavLink>
       <NavLink to="/balance-sheet" className={({ isActive }) => (isActive ? 'active' : '')}>
         Balance Sheet
