@@ -15,6 +15,7 @@ export default function ReceiptScanner({ onSaved }) {
   const [scanning, setScanning] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
   const [result, setResult] = useState(null); // { extractedVendor, extractedDate, extractedAmount, confidence, rawText }
 
   const handleFileChange = async (e) => {
@@ -22,6 +23,7 @@ export default function ReceiptScanner({ onSaved }) {
     if (!selected) return;
     setResult(null);
     setError('');
+    setInfo('');
 
     if (!isHeic(selected)) {
       setFile(selected);
@@ -42,9 +44,15 @@ export default function ReceiptScanner({ onSaved }) {
       setFile(jpegFile);
       setPreviewUrl(URL.createObjectURL(jpegFile));
     } catch (err) {
-      setError(`Couldn't convert this HEIC photo (${err.message || 'unknown error'}) -- try exporting it as a JPEG first.`);
-      setFile(null);
+      // Some HEIC variants (often edited/duplicated photos) use an encoding
+      // the in-browser decoder doesn't support. Don't block the upload --
+      // save the original file and skip straight to manual entry instead.
+      setFile(selected);
       setPreviewUrl(null);
+      setInfo(
+        `This photo's format can't be auto-scanned or previewed (${err.message || 'unsupported HEIC variant'}) -- the file will still be saved. Enter the details below manually, or re-export it as a JPEG for scanning next time.`
+      );
+      setResult({ extractedVendor: null, extractedDate: null, extractedAmount: null, confidence: 0, rawText: '' });
     } finally {
       setConverting(false);
     }
@@ -93,6 +101,7 @@ export default function ReceiptScanner({ onSaved }) {
       setFile(null);
       setPreviewUrl(null);
       setResult(null);
+      setInfo('');
       onSaved?.(data);
     } catch (err) {
       setError(err.message);
@@ -110,6 +119,7 @@ export default function ReceiptScanner({ onSaved }) {
       </div>
 
       {converting && <p className="tooltip-hint">Converting HEIC photo…</p>}
+      {info && <p className="tooltip-hint">{info}</p>}
 
       {previewUrl && (
         <img
@@ -127,10 +137,12 @@ export default function ReceiptScanner({ onSaved }) {
 
       {result && (
         <div style={{ marginTop: 12 }}>
-          <p className="tooltip-hint">
-            OCR confidence: {(result.confidence * 100).toFixed(0)}%
-            {result.confidence < 0.6 && ' — low confidence, double-check the fields below.'}
-          </p>
+          {result.rawText && (
+            <p className="tooltip-hint">
+              OCR confidence: {(result.confidence * 100).toFixed(0)}%
+              {result.confidence < 0.6 && ' — low confidence, double-check the fields below.'}
+            </p>
+          )}
 
           <div className="form-row">
             <label htmlFor="vendor">Vendor</label>
